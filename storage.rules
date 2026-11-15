@@ -1,0 +1,9 @@
+rules_version = '2';
+// Deny by default. All access is through short-lived signed URLs issued by the backend.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

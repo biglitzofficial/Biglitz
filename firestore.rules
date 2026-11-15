@@ -1,0 +1,101 @@
+rules_version = '2';
+// Deny by default. NO client writes to any collection in v1: every write goes through the backend API.
+// Firestore rules cannot hide individual fields, so data with different visibility lives in separate documents
+// (employees / employeePay / employeeTargets / authPins) - see spec Section 12.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function me() { return get(/databases/$(database)/documents/employees/$(uid())).data; }
+    function hasRole(r) { return signedIn() && r in me().roles; }
+    function isSuper() { return hasRole('superAdmin'); }
+    function adminOf(unit) {
+      return isSuper() || (hasRole('admin') && unit in me().adminBusinessIds);
+    }
+    function empDoc(id) { return get(/databases/$(database)/documents/employees/$(id)).data; }
+    // Manager of the employee: only the people who report to them.
+    function managerOfEmp(id) { return hasRole('manager') && empDoc(id).managerId == uid(); }
+    // Scope used for non-money data of an employee: self, their Manager, an Admin of the unit, Super Admin.
+    function canReadEmp(id) { return uid() == id || managerOfEmp(id) || adminOf(empDoc(id).businessId); }
+
+    match /employees/{id} {
+      allow read: if signedIn() && (uid() == id || isSuper()
+        || adminOf(resource.data.businessId)
+        || (hasRole('manager') && resource.data.managerId == uid()));
+      // Documents: only the employee, Admins of the unit and Super Admin. Never Managers or other staff.
+      match /documents/{docId} {
+        allow read: if signedIn() && (uid() == id || adminOf(empDoc(id).businessId));
+      }
+    }
+
+    // Salary and bank: self + Admin/Super Admin only. NEVER a Manager.
+    match /employeePay/{id} {
+      allow read: if signedIn() && (uid() == id || adminOf(empDoc(id).businessId));
+    }
+
+    // Target and slabs: self + Manager + Admin/Super Admin.
+    match /employeeTargets/{id} {
+      allow read: if signedIn() && canReadEmp(id);
+    }
+
+    match /attendance/{id} {
+      allow read: if signedIn() && canReadEmp(resource.data.employeeId);
+    }
+    match /dailySales/{id} {
+      allow read: if signedIn() && canReadEmp(resource.data.employeeId);
+    }
+    // Leave reasons: never other staff.
+    match /leaveRequests/{id} {
+      allow read: if signedIn() && canReadEmp(resource.data.employeeId);
+    }
+    match /scores/{id} {
+      allow read: if signedIn() && canReadEmp(resource.data.employeeId);
+    }
+    match /tasks/{id} {
+      allow read: if signedIn() && canReadEmp(resource.data.assigneeId);
+    }
+    match /leads/{id} {
+      allow read: if signedIn() && (resource.data.assigneeId == uid()
+        || adminOf(resource.data.businessId)
+        || (resource.data.assigneeId != null && managerOfEmp(resource.data.assigneeId)));
+      match /history/{hid} {
+        allow read: if signedIn() && (get(/databases/$(database)/documents/leads/$(id)).data.assigneeId == uid()
+          || adminOf(get(/databases/$(database)/documents/leads/$(id)).data.businessId));
+      }
+    }
+    match /payslips/{id} {
+      allow read: if signedIn() && (resource.data.employeeId == uid() || adminOf(resource.data.businessId));
+    }
+
+    // Public fields only (name, photo, score, rank, streak, badges). Own unit's board.
+    match /leaderboards/{id} {
+      allow read: if signedIn() && (resource.data.unit == me().businessId || adminOf(resource.data.unit));
+    }
+
+    // Admin of the unit + Super Admin.
+    match /payrollRuns/{id} {
+      allow read: if signedIn() && adminOf(resource.data.unit);
+      match /lines/{eid} {
+        allow read: if signedIn() && adminOf(resource.data.businessId);
+      }
+    }
+    match /advances/{id} {
+      allow read: if signedIn() && adminOf(resource.data.businessId);
+    }
+    match /businessUnits/{code} {
+      allow read: if signedIn() && (code == me().businessId || adminOf(code));
+    }
+
+    // Super Admin only.
+    match /auditLogs/{id} {
+      allow read: if isSuper();
+    }
+
+    // authPins, mobileIndex, leadPhones, jobRuns, notificationsLog, settings, scoreState, rewards, leadPools:
+    // backend only (deny by default).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

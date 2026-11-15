@@ -1,0 +1,14 @@
+---
+description: Biglitz Team master spec is the single source of truth
+alwaysApply: true
+---
+
+docs/MASTER_SPEC.md is the single source of truth. Never invent a business rule.
+If something is not specified, or two rules conflict, stop and list it as a question
+for Boobalan in docs/QUESTIONS.md.
+
+- Build in the phase order of Section 14; run that phase's acceptance tests before moving on.
+- Before writing code for a phase, write a short plan (files, collections, endpoints, tests) and wait for confirmation.
+- All money/salary/incentive/score calculations run only on the server. Money is integer paise.
+- TypeScript strict, zod validation on every API input, no `any`.
+- Times stored as UTC; business-day logic in Asia/Kolkata (`dateIST`).

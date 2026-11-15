@@ -1,0 +1,9 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": { "builder": "NIXPACKS", "buildCommand": "npm run build:shared && npm run build -w @biglitz/api" },
+  "deploy": {
+    "startCommand": "npm run start:cron -w @biglitz/api",
+    "cronSchedule": "*/5 * * * *",
+    "restartPolicyType": "NEVER"
+  }
+}
