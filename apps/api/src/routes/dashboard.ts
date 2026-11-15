@@ -123,8 +123,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
     const today = dateIST(now);
     const nowMin = minutesOfDayIST(now);
     const team = (await listScopedEmployees(ctx, a, q.unit)).filter((e) => e.employeeId !== a.id && e.status === "active" && e.joiningDate <= today);
-    const rows = [];
-    for (const e of team) rows.push(await todayRow(ctx, e, today, nowMin));
+    const rows = await todayRows(ctx, team, today, nowMin);
     const summary = {
       total: rows.length,
       present: rows.filter((r) => r.punchedIn).length,
@@ -147,28 +146,38 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
     const units = (await ctx.db.collection("businessUnits").get()).docs.map((d) => d.data() as BusinessUnit);
     const emps = (await ctx.db.collection("employees").get()).docs.map((d) => d.data() as EmployeeDoc).filter((e) => e.status === "active" && !e.roles.includes("superAdmin") && e.joiningDate <= today);
     const prevMonthKey = monthKeyIST(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)) - 2, 15)));
-    const out = [];
-    for (const u of units) {
+    const out = await Promise.all(units.map(async (u) => {
       const list = emps.filter((e) => e.businessId === u.code);
-      const rows = [];
-      for (const e of list) rows.push(await todayRow(ctx, e, today, nowMin));
+      const [rows, perEmp, saleSnaps, run] = await Promise.all([
+        todayRows(ctx, list, today, nowMin),
+        Promise.all(
+          list.map(async (e) => {
+            const [tSnap, lSnap] = await Promise.all([
+              ctx.db.collection("tasks").where("assigneeId", "==", e.employeeId).get(),
+              ctx.db.collection("leads").where("assigneeId", "==", e.employeeId).get(),
+            ]);
+            return {
+              tasks: summarizeTasks(tSnap.docs.map((d) => d.data() as TaskDoc).filter((t) => !t.isTemplate), now),
+              leads: counts(lSnap.docs.map((d) => d.data() as LeadDoc), today, month),
+            };
+          }),
+        ),
+        list.length ? ctx.db.getAll(...list.map((e) => ctx.db.collection("dailySales").doc(salesId(e.employeeId, today)))) : Promise.resolve([]),
+        ctx.db.collection("payrollRuns").doc(`${u.code}_${prevMonthKey}`).get(),
+      ]);
       let assigned = 0;
       let done = 0;
       let followUps = 0;
+      for (const p of perEmp) {
+        assigned += p.tasks.todayTotal;
+        done += p.tasks.todayDone;
+        followUps += p.leads.todayFollowUps + p.leads.overdue;
+      }
       const salesByCategory: Record<string, number> = {};
-      for (const e of list) {
-        const ts = (await ctx.db.collection("tasks").where("assigneeId", "==", e.employeeId).get()).docs.map((d) => d.data() as TaskDoc).filter((t) => !t.isTemplate);
-        const s = summarizeTasks(ts, now);
-        assigned += s.todayTotal;
-        done += s.todayDone;
-        const ls = (await ctx.db.collection("leads").where("assigneeId", "==", e.employeeId).get()).docs.map((d) => d.data() as LeadDoc);
-        const c = counts(ls, today, month);
-        followUps += c.todayFollowUps + c.overdue;
-        const sale = await ctx.db.collection("dailySales").doc(salesId(e.employeeId, today)).get();
+      for (const sale of saleSnaps) {
         if (sale.exists) for (const [k, v] of Object.entries((sale.data() as DailySalesDoc).values)) salesByCategory[k] = (salesByCategory[k] ?? 0) + v;
       }
-      const run = await ctx.db.collection("payrollRuns").doc(`${u.code}_${prevMonthKey}`).get();
-      out.push({
+      return {
         unit: u.code,
         name: u.name,
         present: rows.filter((r) => r.punchedIn).length,
@@ -179,8 +188,8 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
         followUpsDue: followUps,
         salesByCategory,
         payroll: run.exists ? { month: prevMonthKey, salary: (run.data() as PayrollRun).salaryStatus, incentive: (run.data() as PayrollRun).incentiveStatus } : null,
-      });
-    }
+      };
+    }));
     return { dateIST: today, units: out };
   });
 
@@ -190,9 +199,28 @@ export type TodayState = "present" | "onLeave" | "absent" | "notYet";
 
 /** `notYet` = hasn't punched in but the shift start has not passed yet; `absent` = shift started, no punch, no leave. */
 export async function todayRow(ctx: AppContext, e: EmployeeDoc, today: string, nowMin: number) {
-  const att = (await ctx.db.collection("attendance").doc(attendanceId(e.employeeId, today)).get()).data() as AttendanceDoc | undefined;
-  const leave = (await ctx.db.collection("leaveRequests").doc(attendanceId(e.employeeId, today)).get()).data() as LeaveDoc | undefined;
-  const sales = await ctx.db.collection("dailySales").doc(salesId(e.employeeId, today)).get();
+  const rows = await todayRows(ctx, [e], today, nowMin);
+  return rows[0] as TodayRow;
+}
+
+export type TodayRow = ReturnType<typeof buildTodayRow>;
+
+/** Batched: 3 Firestore round trips total regardless of team size. */
+export async function todayRows(ctx: AppContext, emps: EmployeeDoc[], today: string, nowMin: number): Promise<TodayRow[]> {
+  if (emps.length === 0) return [];
+  const col = (name: string) => ctx.db.collection(name);
+  const [attSnaps, leaveSnaps, salesSnaps] = await Promise.all([
+    ctx.db.getAll(...emps.map((e) => col("attendance").doc(attendanceId(e.employeeId, today)))),
+    ctx.db.getAll(...emps.map((e) => col("leaveRequests").doc(attendanceId(e.employeeId, today)))),
+    ctx.db.getAll(...emps.map((e) => col("dailySales").doc(salesId(e.employeeId, today)))),
+  ]);
+  return emps.map((e, i) =>
+    buildTodayRow(e, today, nowMin, attSnaps[i]?.data() as AttendanceDoc | undefined, leaveSnaps[i]?.data() as LeaveDoc | undefined, salesSnaps[i]?.exists ?? false),
+  );
+}
+
+function buildTodayRow(e: EmployeeDoc, _today: string, nowMin: number, att: AttendanceDoc | undefined, leave: LeaveDoc | undefined, salesExists: boolean) {
+  const sales = { exists: salesExists };
   const punchedIn = !!att?.punchInAt;
   const shiftStart = parseTimeOfDay(e.shift.start);
   const late = punchedIn && att?.punchInAt ? minutesOfDayIST(att.punchInAt.toDate()) > shiftStart : false;
