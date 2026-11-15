@@ -23,6 +23,20 @@ function navFor(me: ReturnType<typeof useMe>): Array<{ path: string; label: stri
   return [home, { path: "/tasks", label: "Tasks", icon: "✅", match: "tasks" }, { path: "/leads", label: "Leads", icon: "📞", match: "leads" }, { path: "/attendance", label: "Attendance", icon: "📅", match: "attendance" }, more];
 }
 
+function sideFor(me: ReturnType<typeof useMe>): Array<{ path: string; label: string; icon: string; match: string }> {
+  const items = [
+    { path: "/", label: isSuper(me) ? "Overview" : "My home", icon: "🏠", match: "" },
+    { path: "/team/today", label: "Team today", icon: "👥", match: "team" },
+    { path: "/admin/employees", label: "People", icon: "🧑‍💼", match: "admin/employees" },
+    { path: "/admin/payroll", label: "Payroll", icon: "💰", match: "admin/payroll" },
+    { path: "/admin/reports", label: "Reports", icon: "📊", match: "admin/reports" },
+    { path: "/admin/units", label: "Business units", icon: "🏪", match: "admin/units" },
+  ];
+  if (isSuper(me)) items.push({ path: "/admin/audit", label: "Audit log", icon: "🧾", match: "admin/audit" });
+  items.push({ path: "/profile", label: "Profile & PIN", icon: "⚙️", match: "profile" });
+  return items;
+}
+
 function Denied() {
   return <p className="p-6 text-center text-sm text-slate-500">You do not have access to this page.</p>;
 }
@@ -88,10 +102,11 @@ function Shell() {
 
   const nav = navFor(me);
   const hideNav = a === "punch";
+  const side = sideFor(me);
   return (
-    <div className="min-h-screen bg-slate-100 pb-20">
-      <header className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-white">
-        <div className="mx-auto flex max-w-xl items-center justify-between md:max-w-3xl">
+    <div className={`min-h-screen bg-slate-100 pb-20 ${adm ? "lg:pb-0" : ""}`}>
+      <header className="sticky top-0 z-20 bg-slate-900 px-4 py-3 text-white">
+        <div className={`mx-auto flex max-w-xl items-center justify-between md:max-w-3xl ${adm ? "lg:max-w-none" : ""}`}>
           <button type="button" onClick={() => go("/")} className="font-bold text-amber-400">
             Biglitz Team
           </button>
@@ -100,11 +115,33 @@ function Shell() {
           </span>
         </div>
       </header>
-      <main key={key} className="mx-auto max-w-xl p-4 md:max-w-3xl">
-        {screen}
-      </main>
+      <div className={adm ? "lg:flex" : ""}>
+        {adm && (
+          <aside className="hidden min-h-[calc(100vh-3rem)] w-56 shrink-0 border-r bg-white lg:block">
+            <nav className="sticky top-12 space-y-1 p-3">
+              {side.map((n) => {
+                const active = n.match === "" ? key === "" : key === n.match || key.startsWith(`${n.match}/`);
+                return (
+                  <button
+                    key={n.path}
+                    type="button"
+                    onClick={() => go(n.path)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-amber-100 font-semibold text-amber-800" : "text-slate-700 hover:bg-slate-100"}`}
+                  >
+                    <span>{n.icon}</span>
+                    {n.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+        )}
+        <main key={key} className={`mx-auto w-full max-w-xl p-4 md:max-w-3xl ${adm ? "lg:mx-0 lg:max-w-6xl lg:p-6" : ""}`}>
+          {screen}
+        </main>
+      </div>
       {!hideNav && (
-        <nav className="fixed inset-x-0 bottom-0 z-10 border-t bg-white pb-[env(safe-area-inset-bottom)]">
+        <nav className={`fixed inset-x-0 bottom-0 z-10 border-t bg-white pb-[env(safe-area-inset-bottom)] ${adm ? "lg:hidden" : ""}`}>
           <div className="mx-auto flex max-w-xl md:max-w-3xl">
             {nav.map((n) => {
               const active = n.match === "" ? key === "" : key === n.match || key.startsWith(`${n.match}/`);
