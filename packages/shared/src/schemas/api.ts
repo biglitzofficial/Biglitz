@@ -14,7 +14,8 @@ export const pinSchema = z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digi
 const rupees = z.number().int().min(0, "Amount must be 0 or more");
 
 // ---- Auth ----
-export const loginInput = z.object({ mobile: mobileSchema, pin: pinSchema });
+/** `portal` is "admin" only when signing in from the /admin website; the Super Admin may sign in only there. */
+export const loginInput = z.object({ mobile: mobileSchema, pin: pinSchema, portal: z.enum(["app", "admin"]).default("app") });
 export const changePinInput = z.object({ currentPin: pinSchema, newPin: pinSchema });
 export const resetPinInput = z.object({ tempPin: pinSchema });
 

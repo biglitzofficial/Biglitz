@@ -13,7 +13,9 @@ export function Login() {
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 bg-slate-900 p-6 text-white">
       <div className="text-center">
         <h1 className="text-3xl font-bold text-amber-400">Biglitz Team</h1>
-        <p className="text-sm text-slate-400">Sign in with your mobile number and PIN</p>
+        <p className="text-sm text-slate-400">
+          {window.location.pathname.startsWith("/admin") ? "Admin portal: sign in with your mobile number and PIN" : "Sign in with your mobile number and PIN"}
+        </p>
       </div>
       <form
         className="space-y-3 rounded-2xl bg-white p-4 text-slate-900"

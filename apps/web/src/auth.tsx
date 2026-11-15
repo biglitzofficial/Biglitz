@@ -42,7 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const login = useCallback(async (mobile: string, pin: string) => {
-    const res = await api<{ token: string }>("POST", "/api/auth/login", { mobile, pin }, false);
+    const portal = window.location.pathname.startsWith("/admin") ? "admin" : "app";
+    const res = await api<{ token: string }>("POST", "/api/auth/login", { mobile, pin, portal }, false);
     await signInWithToken(res.token);
     setMe(await get<Me>("/api/me"));
   }, []);

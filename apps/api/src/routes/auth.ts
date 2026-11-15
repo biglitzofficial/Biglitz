@@ -55,7 +55,7 @@ export async function authenticate(ctx: AppContext, req: FastifyRequest, opts: {
 
 export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.post("/api/auth/login", async (req) => {
-    const { mobile, pin } = loginInput.parse(req.body);
+    const { mobile, pin, portal } = loginInput.parse(req.body);
     const now = ctx.clock();
     const idx = await ctx.db.collection("mobileIndex").doc(mobile).get();
     const wrong = new HttpError(401, "BAD_CREDENTIALS", "Mobile number or PIN is incorrect.");
@@ -88,6 +88,14 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
 
     const blocked = loginBlockReason(emp, dateIST(now));
     if (blocked) throw new HttpError(401, "ACCOUNT_INACTIVE", blocked);
+
+    // Portal rule: the Super Admin signs in only at /admin; /admin admits Admins and the Super Admin only.
+    if (emp.roles.includes("superAdmin") && portal !== "admin") {
+      throw new HttpError(403, "ADMIN_PORTAL_ONLY", "The Super Admin can sign in only at the /admin address.");
+    }
+    if (portal === "admin" && !emp.roles.includes("superAdmin") && !emp.roles.includes("admin")) {
+      throw new HttpError(403, "NOT_AN_ADMIN", "This sign-in page is for Admins only. Use the normal app address.");
+    }
 
     await pinRef.update({ failedAttempts: 0, lockedUntil: null });
     const token = await ctx.tokens.mint(employeeId, {

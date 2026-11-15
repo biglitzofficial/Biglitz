@@ -59,3 +59,15 @@ describe("admin reports (spec 11.3)", () => {
     expect((await h.call("GET", "/api/reports", { as: a })).status).toBe(403);
   });
 });
+
+describe("portal rule", () => {
+  it("Super Admin signs in only via the admin portal; the admin portal rejects staff", async () => {
+    const a = await createStaff(h, { name: "S", mobile: "9876500009" });
+    expect((await h.call("POST", "/api/auth/login", { body: { mobile: "9000000001", pin: "7391" } })).status).toBe(403);
+    expect((await h.call("POST", "/api/auth/login", { body: { mobile: "9000000001", pin: "7391", portal: "app" } })).body.code).toBe("ADMIN_PORTAL_ONLY");
+    expect((await h.call("POST", "/api/auth/login", { body: { mobile: "9000000001", pin: "7391", portal: "admin" } })).status).toBe(200);
+    expect(a).toBeTruthy();
+    expect((await h.call("POST", "/api/auth/login", { body: { mobile: "9876500009", pin: "4821", portal: "admin" } })).body.code).toBe("NOT_AN_ADMIN");
+    expect((await h.call("POST", "/api/auth/login", { body: { mobile: "9876500009", pin: "4821" } })).status).toBe(200);
+  });
+});
