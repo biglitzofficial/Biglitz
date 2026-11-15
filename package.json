@@ -11,6 +11,7 @@
     "typecheck": "npm run build:shared && npm run typecheck -w @biglitz/api && npm run typecheck -w @biglitz/web",
     "test": "npm run build:shared && npm run test -w @biglitz/shared && npm run test -w @biglitz/api",
     "test:int": "npm run build:shared && npm run test:int -w @biglitz/api && npm run test:rules -w @biglitz/api",
+    "start": "npm run start -w @biglitz/api",
     "seed": "npm run seed -w @biglitz/api"
   },
   "devDependencies": {
