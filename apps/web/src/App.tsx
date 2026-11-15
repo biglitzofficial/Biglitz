@@ -104,9 +104,9 @@ function Shell() {
   const hideNav = a === "punch";
   const side = sideFor(me);
   return (
-    <div className={`min-h-screen bg-slate-100 pb-20 ${adm ? "lg:pb-0" : ""}`}>
+    <div className={`min-h-screen bg-slate-100 pb-20 ${adm ? "md:pb-0" : ""}`}>
       <header className="sticky top-0 z-20 bg-slate-900 px-4 py-3 text-white">
-        <div className={`mx-auto flex max-w-xl items-center justify-between md:max-w-3xl ${adm ? "lg:max-w-none" : ""}`}>
+        <div className={`mx-auto flex max-w-xl items-center justify-between ${adm ? "md:max-w-none" : "md:max-w-3xl"}`}>
           <button type="button" onClick={() => go("/")} className="font-bold text-amber-400">
             Biglitz Team
           </button>
@@ -115,9 +115,9 @@ function Shell() {
           </span>
         </div>
       </header>
-      <div className={adm ? "lg:flex" : ""}>
+      <div className={adm ? "md:flex" : ""}>
         {adm && (
-          <aside className="hidden min-h-[calc(100vh-3rem)] w-56 shrink-0 border-r bg-white lg:block">
+          <aside className="hidden min-h-[calc(100vh-3rem)] w-56 shrink-0 border-r bg-white md:block">
             <nav className="sticky top-12 space-y-1 p-3">
               {side.map((n) => {
                 const active = n.match === "" ? key === "" : key === n.match || key.startsWith(`${n.match}/`);
@@ -136,13 +136,13 @@ function Shell() {
             </nav>
           </aside>
         )}
-        <main key={key} className={`mx-auto w-full max-w-xl p-4 md:max-w-3xl ${adm ? "lg:mx-0 lg:max-w-6xl lg:p-6" : ""}`}>
+        <main key={key} className={`mx-auto w-full max-w-xl p-4 ${adm ? "md:mx-0 md:max-w-6xl md:p-6" : "md:max-w-3xl"}`}>
           {screen}
         </main>
       </div>
       {!hideNav && (
-        <nav className={`fixed inset-x-0 bottom-0 z-10 border-t bg-white pb-[env(safe-area-inset-bottom)] ${adm ? "lg:hidden" : ""}`}>
-          <div className="mx-auto flex max-w-xl md:max-w-3xl">
+        <nav className={`fixed inset-x-0 bottom-0 z-10 border-t bg-white pb-[env(safe-area-inset-bottom)] ${adm ? "md:hidden" : ""}`}>
+          <div className="mx-auto flex max-w-xl">
             {nav.map((n) => {
               const active = n.match === "" ? key === "" : key === n.match || key.startsWith(`${n.match}/`);
               return (

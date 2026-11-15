@@ -1,6 +1,6 @@
 // Minimal service worker: makes the app installable and caches the app shell.
 // API/Firestore calls are never cached (data must always be live; punches are never queued offline).
-const CACHE = "biglitz-shell-v1";
+const CACHE = "biglitz-shell-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
