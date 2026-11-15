@@ -42,12 +42,15 @@ export async function authenticate(ctx: AppContext, req: FastifyRequest, opts: {
   } catch {
     throw unauthorized("Your session has expired. Please log in again.");
   }
-  const emp = await loadEmployee(ctx, uid);
+  const [emp, pinSnap] = await Promise.all([
+    loadEmployee(ctx, uid),
+    opts.allowMustChangePin ? Promise.resolve(null) : ctx.db.collection("authPins").doc(uid).get(),
+  ]);
   if (!emp) throw unauthorized();
   const blocked = loginBlockReason(emp, dateIST(ctx.clock()));
   if (blocked) throw new HttpError(401, "ACCOUNT_INACTIVE", blocked);
-  if (!opts.allowMustChangePin) {
-    const pin = (await ctx.db.collection("authPins").doc(uid).get()).data() as AuthPinDoc | undefined;
+  if (pinSnap) {
+    const pin = pinSnap.data() as AuthPinDoc | undefined;
     if (pin?.mustChangePin) throw new HttpError(403, "PIN_CHANGE_REQUIRED", "Please set a new PIN before continuing.");
   }
   return { id: uid, emp };

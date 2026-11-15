@@ -40,7 +40,12 @@ async function send(method: string, path: string, body?: unknown, auth = true): 
   return res;
 }
 
+/** Screen data cache (stale-while-revalidate): screens render the last result instantly, then refresh. Cleared on any write or sign-out. */
+export const screenCache = new Map<string, unknown>();
+export const clearScreenCache = (): void => screenCache.clear();
+
 export async function api<T>(method: "GET" | "POST" | "PUT" | "PATCH", path: string, body?: unknown, auth = true): Promise<T> {
+  if (method !== "GET") clearScreenCache();
   const res = await send(method, path, body, auth);
   return (await res.json()) as T;
 }

@@ -84,8 +84,10 @@ export interface EmployeePeriod {
 
 /** Loads attendance/leave for `dates` and builds day details. */
 export async function loadDayDetails(ctx: AppContext, emp: EmployeeDoc, dates: string[], today: string): Promise<DayDetail[]> {
-  const attSnaps = await getAll(ctx, dates.map((d) => ctx.db.collection("attendance").doc(attendanceId(emp.employeeId, d))));
-  const leaveSnaps = await getAll(ctx, dates.map((d) => ctx.db.collection("leaveRequests").doc(attendanceId(emp.employeeId, d))));
+  const [attSnaps, leaveSnaps] = await Promise.all([
+    getAll(ctx, dates.map((d) => ctx.db.collection("attendance").doc(attendanceId(emp.employeeId, d)))),
+    getAll(ctx, dates.map((d) => ctx.db.collection("leaveRequests").doc(attendanceId(emp.employeeId, d)))),
+  ]);
   return dates.map((date, i) =>
     dayDetail(date, attSnaps[i]?.exists ? (attSnaps[i]?.data() as AttendanceDoc) : undefined, leaveSnaps[i]?.exists ? (leaveSnaps[i]?.data() as LeaveDoc) : undefined, today),
   );

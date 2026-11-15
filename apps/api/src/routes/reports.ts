@@ -28,26 +28,23 @@ export function registerReportRoutes(app: FastifyInstance, ctx: AppContext): voi
     const units = q.unit ? allowed.filter((u) => u === q.unit) : allowed;
     if (q.unit && units.length === 0) throw forbidden("That business unit is not assigned to you.");
 
-    const emps: EmployeeDoc[] = [];
-    for (const u of units) {
-      const snaps = await ctx.db.collection("employees").where("businessId", "==", u).get();
-      snaps.docs.forEach((d) => emps.push(d.data() as EmployeeDoc));
-    }
+    const empSnaps = await Promise.all(units.map((u) => ctx.db.collection("employees").where("businessId", "==", u).get()));
+    const emps: EmployeeDoc[] = empSnaps.flatMap((s) => s.docs.map((d) => d.data() as EmployeeDoc));
     const active = emps.filter((e) => e.status !== "pending" && !e.roles.includes("superAdmin"));
 
     // Payroll cost per unit (from payroll runs of the month).
-    const payrollCost = [];
-    for (const u of units) {
-      const run = await ctx.db.collection("payrollRuns").doc(`${u}_${month}`).get();
-      const r = run.exists ? (run.data() as PayrollRun) : null;
-      payrollCost.push({ unit: u, salaryNetPaise: r?.totals.salaryNetPaise ?? 0, incentivePaise: r?.totals.incentivePaise ?? 0, status: r ? `${r.salaryStatus}/${r.incentiveStatus}` : "no run" });
-    }
+    const runSnaps = units.length ? await ctx.db.getAll(...units.map((u) => ctx.db.collection("payrollRuns").doc(`${u}_${month}`))) : [];
+    const payrollCost = units.map((u, i) => {
+      const run = runSnaps[i];
+      const r = run?.exists ? (run.data() as PayrollRun) : null;
+      return { unit: u, salaryNetPaise: r?.totals.salaryNetPaise ?? 0, incentivePaise: r?.totals.incentivePaise ?? 0, status: r ? `${r.salaryStatus}/${r.incentiveStatus}` : "no run" };
+    });
 
     // Attendance trend: per day counts for the month up to today.
     const trend = new Map<string, { present: number; late: number; absent: number; onLeave: number }>();
-    for (const e of active) {
-      const dates = eligibleDates(e, month, `${month}-31`).filter((d) => d <= today);
-      for (const d of await loadDayDetails(ctx, e, dates, today)) {
+    const allDetails = await Promise.all(active.map((e) => loadDayDetails(ctx, e, eligibleDates(e, month, `${month}-31`).filter((d) => d <= today), today)));
+    for (const details of allDetails) {
+      for (const d of details) {
         const row = trend.get(d.date) ?? { present: 0, late: 0, absent: 0, onLeave: 0 };
         if (d.present > 0) row.present++;
         if (d.late) row.late++;
@@ -60,17 +57,21 @@ export function registerReportRoutes(app: FastifyInstance, ctx: AppContext): voi
 
     // Discipline ranking (latest nightly leaderboard of each unit).
     const ranking: Array<LeaderboardEntry & { unit: string }> = [];
-    for (const u of units) {
-      const lb = await ctx.db.collection("leaderboards").doc(`${u}_${month}`).get();
+    const lbSnaps = units.length ? await ctx.db.getAll(...units.map((u) => ctx.db.collection("leaderboards").doc(`${u}_${month}`))) : [];
+    for (const [i, lb] of lbSnaps.entries()) {
+      const u = units[i] as string;
       if (lb.exists) for (const e of (lb.data() as { entries: LeaderboardEntry[] }).entries) ranking.push({ ...e, unit: u });
     }
 
     // Sales by category per unit.
     const salesByCategory: Record<string, Record<string, number>> = {};
-    for (const e of active) {
-      const dates = eligibleDates(e, month, `${month}-31`);
-      if (!dates.length) continue;
-      const snaps = await ctx.db.getAll(...dates.map((d) => ctx.db.collection("dailySales").doc(salesId(e.employeeId, d))));
+    const salesSnaps = await Promise.all(
+      active.map(async (e) => {
+        const dates = eligibleDates(e, month, `${month}-31`);
+        return { e, snaps: dates.length ? await ctx.db.getAll(...dates.map((d) => ctx.db.collection("dailySales").doc(salesId(e.employeeId, d)))) : [] };
+      }),
+    );
+    for (const { e, snaps } of salesSnaps) {
       for (const s of snaps) {
         if (!s.exists) continue;
         const bucket = (salesByCategory[e.businessId] ??= {});
@@ -80,8 +81,8 @@ export function registerReportRoutes(app: FastifyInstance, ctx: AppContext): voi
 
     // Leads funnel.
     const funnel = { new: 0, contacted: 0, followUp: 0, closedWon: 0, lost: 0 };
-    for (const u of units) {
-      const snaps = await ctx.db.collection("leads").where("businessId", "==", u).get();
+    const leadSnaps = await Promise.all(units.map((u) => ctx.db.collection("leads").where("businessId", "==", u).get()));
+    for (const snaps of leadSnaps) {
       for (const d of snaps.docs) funnel[(d.data() as LeadDoc).status]++;
     }
 

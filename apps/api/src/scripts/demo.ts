@@ -82,7 +82,6 @@ const dates = (from: string, to: string): string[] => {
   for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
   return out;
 };
-const pick = <T,>(arr: readonly T[], r: () => number): T => arr[Math.floor(r() * arr.length)] as T;
 const hm = (mins: number): string => `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
 
 // ================= clear =================

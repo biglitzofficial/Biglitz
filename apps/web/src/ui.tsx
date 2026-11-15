@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ApiError } from "./lib/api";
+import { ApiError, screenCache } from "./lib/api";
 
 export const errMsg = (e: unknown): string => (e instanceof Error ? e.message : "Something went wrong.");
 
@@ -132,16 +132,21 @@ export function Stat({ label, value, sub, onClick, tone }: { label: string; valu
 
 /** Loads data on mount / when deps change; exposes reload. */
 export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | null; error: string | null; loading: boolean; reload: () => void } {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
   const stable = useCallback(fn, deps);
+  const key = `${fn.toString()}|${JSON.stringify(deps)}`;
+  const cached = screenCache.get(key) as T | undefined;
+  const [data, setData] = useState<T | null>(cached ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(cached === undefined);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let live = true;
-    setLoading(true);
+    const hit = screenCache.get(key) as T | undefined;
+    setData(hit ?? null);
+    setLoading(hit === undefined);
     stable()
       .then((d) => {
+        screenCache.set(key, d);
         if (live) {
           setData(d);
           setError(null);
@@ -152,7 +157,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | n
     return () => {
       live = false;
     };
-  }, [stable, tick]);
+  }, [stable, tick, key]);
   return { data, error, loading, reload: () => setTick((t) => t + 1) };
 }
 

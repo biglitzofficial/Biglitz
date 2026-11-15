@@ -38,23 +38,22 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
     const month = monthKeyIST(now);
     const yesterday = addDays(today, -1);
 
-    const attSnap = await ctx.db.collection("attendance").doc(attendanceId(emp.employeeId, today)).get();
-    const att = attSnap.exists ? (attSnap.data() as AttendanceDoc) : null;
-
-    const taskSnaps = await ctx.db.collection("tasks").where("assigneeId", "==", emp.employeeId).get();
-    const tasks = summarizeTasks(taskSnaps.docs.map((d) => d.data() as TaskDoc).filter((t) => !t.isTemplate), now);
-
-    const leadSnaps = await ctx.db.collection("leads").where("assigneeId", "==", emp.employeeId).get();
-    const leadCounts = counts(leadSnaps.docs.map((d) => d.data() as LeadDoc), today, month);
-
-    const salesSnap = await ctx.db.collection("dailySales").doc(salesId(emp.employeeId, today)).get();
-    const salesToday = salesSnap.exists ? (salesSnap.data() as DailySalesDoc).amountTotalPaise : 0;
-
-    // Salary so far / projected / leave used.
-    const pay = (await ctx.db.collection("employeePay").doc(emp.employeeId).get()).data() as EmployeePayDoc;
     const D = daysInMonth(month);
     const E = eligibleDays(month, emp.joiningDate, emp.exitDate);
-    const throughToday = await loadDayDetails(ctx, emp, eligibleDates(emp, month, today), today);
+    const [attSnap, taskSnaps, leadSnaps, salesSnap, paySnap, scoreSnap, throughToday] = await Promise.all([
+      ctx.db.collection("attendance").doc(attendanceId(emp.employeeId, today)).get(),
+      ctx.db.collection("tasks").where("assigneeId", "==", emp.employeeId).get(),
+      ctx.db.collection("leads").where("assigneeId", "==", emp.employeeId).get(),
+      ctx.db.collection("dailySales").doc(salesId(emp.employeeId, today)).get(),
+      ctx.db.collection("employeePay").doc(emp.employeeId).get(),
+      ctx.db.collection("scores").doc(`${emp.employeeId}_${month}`).get(),
+      loadDayDetails(ctx, emp, eligibleDates(emp, month, today), today),
+    ]);
+    const att = attSnap.exists ? (attSnap.data() as AttendanceDoc) : null;
+    const tasks = summarizeTasks(taskSnaps.docs.map((d) => d.data() as TaskDoc).filter((t) => !t.isTemplate), now);
+    const leadCounts = counts(leadSnaps.docs.map((d) => d.data() as LeadDoc), today, month);
+    const salesToday = salesSnap.exists ? (salesSnap.data() as DailySalesDoc).amountTotalPaise : 0;
+    const pay = paySnap.data() as EmployeePayDoc;
     const presentSoFar = throughToday.reduce((s, d) => s + d.present, 0);
     const prior = eligibleDates(emp, month, yesterday);
     const todayCounted = att?.punchInAt ? 1 : 0;
@@ -62,7 +61,6 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
     const priorPresent = throughToday.filter((d) => d.date <= yesterday).reduce((s, d) => s + d.present, 0);
     const leaveUsed = Math.max(0, prior.length - priorPresent);
 
-    const scoreSnap = await ctx.db.collection("scores").doc(`${emp.employeeId}_${month}`).get();
     const score = scoreSnap.exists ? (scoreSnap.data() as ScoreDoc) : null;
     let gap: { toRank: number; points: number } | null = null;
     if (score && score.rank > 1) {

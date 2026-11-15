@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, get } from "./lib/api";
+import { api, clearScreenCache, get } from "./lib/api";
 import { signInWithToken, signOutUser, watchAuth } from "./lib/firebase";
 import type { Me } from "./lib/types";
 
@@ -49,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    clearScreenCache();
     await signOutUser();
     setMe(null);
     window.location.hash = "";
