@@ -10,6 +10,8 @@
     "start": "node dist/server.js",
     "start:cron": "node dist/cron/dispatcher.js",
     "seed": "tsx src/scripts/seed.ts",
+    "demo:load": "tsx src/scripts/demo.ts load",
+    "demo:clear": "tsx src/scripts/demo.ts clear",
     "test": "vitest run",
     "test:int": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-biglitz \"vitest run -c vitest.integration.config.ts\"",
     "test:rules": "firebase emulators:exec --config ../../firebase.json --only firestore --project demo-biglitz \"vitest run -c vitest.rules.config.ts\""
