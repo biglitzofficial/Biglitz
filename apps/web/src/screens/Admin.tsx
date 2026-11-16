@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { MapPicker, mapsEnabled } from "../MapPicker";
 import { get, patch, post, put, uploadToSignedUrl } from "../lib/api";
 import { inr, prettyDate, todayIST, dateTimeIST } from "../lib/format";
 import type { BusinessUnit, Employee, Role, SalesCategory } from "../lib/types";
@@ -661,6 +662,20 @@ function UnitEditor({ unit, onSaved }: { unit: BusinessUnit; onSaved: () => void
           <Input placeholder="https://www.google.com/maps/@11.1085,77.3411,17z   or   11.1085, 77.3411" value={mapText} onChange={(e) => applyMapText(e.target.value)} />
         </Field>
         {mapMsg && <p className="text-xs text-slate-600">{mapMsg}</p>}
+        {mapsEnabled && (
+          <div>
+            <div className="mb-1 text-xs text-slate-600">Click the map (or drag the pin) on the shop entrance.</div>
+            <MapPicker
+              lat={lat ? Number(lat) : null}
+              lng={lng ? Number(lng) : null}
+              radius={Number(radius) || 100}
+              onPick={(la, lo) => {
+                setLat(String(la));
+                setLng(String(lo));
+              }}
+            />
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2">
           <Field label="Latitude">
             <Input value={lat} onChange={(e) => setLat(e.target.value)} />
