@@ -625,6 +625,26 @@ function UnitEditor({ unit, onSaved }: { unit: BusinessUnit; onSaved: () => void
       setLng(String(p.coords.longitude));
     });
 
+  const [mapText, setMapText] = useState("");
+  const [mapMsg, setMapMsg] = useState<string | null>(null);
+  /** Reads coordinates from a Google Maps link ("@11.1,77.3", "!3d..!4d..", "?q=lat,lng") or pasted "lat, lng". */
+  const applyMapText = (text: string) => {
+    setMapText(text);
+    const t = decodeURIComponent(text.trim());
+    const m =
+      /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/.exec(t) ??
+      /@(-?\d+\.\d+),\s*(-?\d+\.\d+)/.exec(t) ??
+      /[?&](?:q|ll|query|destination)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/.exec(t) ??
+      /^\s*(-?\d{1,2}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)\s*$/.exec(t);
+    if (m?.[1] && m[2]) {
+      setLat(m[1]);
+      setLng(m[2]);
+      setMapMsg(`Location set: ${m[1]}, ${m[2]}. Check it with "Open in Google Maps", then Save.`);
+    } else if (t) {
+      setMapMsg(/goo\.gl|maps\.app/.test(t) ? "Short links cannot be read. Open the link, then copy the full address-bar link, or long-press the pin and copy the coordinates." : "Could not find coordinates in that text.");
+    } else setMapMsg(null);
+  };
+
   return (
     <Card>
       <h2 className="mb-2 font-semibold">
@@ -637,6 +657,10 @@ function UnitEditor({ unit, onSaved }: { unit: BusinessUnit; onSaved: () => void
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active
         </label>
+        <Field label="Google Maps location (paste a Maps link or coordinates)">
+          <Input placeholder="https://www.google.com/maps/@11.1085,77.3411,17z   or   11.1085, 77.3411" value={mapText} onChange={(e) => applyMapText(e.target.value)} />
+        </Field>
+        {mapMsg && <p className="text-xs text-slate-600">{mapMsg}</p>}
         <div className="grid grid-cols-3 gap-2">
           <Field label="Latitude">
             <Input value={lat} onChange={(e) => setLat(e.target.value)} />
@@ -648,9 +672,19 @@ function UnitEditor({ unit, onSaved }: { unit: BusinessUnit; onSaved: () => void
             <Input inputMode="numeric" value={radius} onChange={(e) => setRadius(e.target.value.replace(/\D/g, ""))} />
           </Field>
         </div>
-        <button type="button" onClick={useMyLocation} className="text-sm text-sky-700 underline">
-          Use my current location
-        </button>
+        <div className="flex flex-wrap gap-4">
+          <button type="button" onClick={useMyLocation} className="text-sm text-sky-700 underline">
+            Use my current location
+          </button>
+          <a href="https://www.google.com/maps" target="_blank" rel="noreferrer" className="text-sm text-sky-700 underline">
+            Open Google Maps to find the shop
+          </a>
+          {lat && lng && (
+            <a href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noreferrer" className="text-sm text-sky-700 underline">
+              Open in Google Maps (check pin)
+            </a>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Default shift start">
             <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
