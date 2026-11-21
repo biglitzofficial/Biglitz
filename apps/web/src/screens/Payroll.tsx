@@ -22,7 +22,7 @@ function AdjustModal({ unit, month, lines, onClose, onSaved }: { unit: string; m
   const { busy, error, run } = useAction();
   return (
     <Modal title="Salary adjustment (add or deduct)" onClose={onClose}>
-      <p className="mb-2 text-xs text-slate-500">Use Deduct for a fine/penalty until a separate fine feature is confirmed. Only Admins/Super Admin, and only while payroll is still a draft.</p>
+      <p className="mb-2 text-xs text-slate-500">Changes this month&apos;s salary only (draft). Prefer the person&apos;s Deduction tab for ongoing salary reductions.</p>
       <Field label="Employee">
         <Select value={emp} onChange={(e) => setEmp(e.target.value)}>
           {lines.map((l) => (
@@ -33,14 +33,14 @@ function AdjustModal({ unit, month, lines, onClose, onSaved }: { unit: string; m
         </Select>
       </Field>
       <div className="flex gap-2">
-        <Select value={sign} onChange={(e) => setSign(e.target.value)} className="!w-28">
-          <option value="+">+ Add</option>
-          <option value="-">− Deduct / fine</option>
+        <Select value={sign} onChange={(e) => setSign(e.target.value)} className="!w-36">
+          <option value="+">+ Add to salary</option>
+          <option value="-">− Reduce salary</option>
         </Select>
         <Input inputMode="numeric" placeholder="Amount ₹" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} />
       </div>
       <Field label="Reason (required)">
-        <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Late fine, travel allowance" />
+        <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Late deduction, travel allowance" />
       </Field>
       <ErrorBox message={error} />
       <Btn

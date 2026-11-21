@@ -103,7 +103,7 @@ export async function buildLine(ctx: AppContext, emp: EmployeeDoc, month: string
   const penaltyAdjs: Adjustment[] = penalties.map((p) => ({
     kind: "adjustment",
     amountPaise: -(p.amountPaise - p.recoveredPaise),
-    reason: `Penalty: ${p.reason}`,
+    reason: `Salary deduction: ${p.reason}`,
     by: "system",
     at: Timestamp.fromDate(ctx.clock()),
     key: `penalty_${p.id}`,

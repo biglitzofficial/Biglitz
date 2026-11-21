@@ -613,28 +613,35 @@ export function Penalties({ id }: { id: string }) {
   const { busy, error, run } = useAction();
   return (
     <Card>
-      <h2 className="mb-2 font-semibold">Penalties / fines</h2>
-      <p className="mb-2 text-xs text-slate-500">Manager or Admin can add. Deducted from the next salary draft. Reason is required.</p>
+      <h2 className="mb-2 font-semibold">Salary deduction</h2>
+      <p className="mb-2 text-xs text-slate-500">
+        This amount is reduced from the staff member&apos;s next salary (not collected separately). Reason is required.
+      </p>
       <Async state={list}>
         {({ penalties }) => (
           <div className="mb-3 space-y-1">
-            {penalties.length === 0 && <p className="text-sm text-slate-500">No penalties.</p>}
-            {penalties.map((p) => (
-              <div key={p.id} className="flex justify-between gap-2 text-sm">
-                <span>
-                  {prettyDate(p.date)} · {p.reason}
-                </span>
-                <span className="shrink-0 text-red-700">
-                  −{inr(p.amountPaise)}{" "}
-                  <span className="text-xs text-slate-500">(recovered {inr(p.recoveredPaise)})</span>
-                </span>
-              </div>
-            ))}
+            {penalties.length === 0 && <p className="text-sm text-slate-500">No salary deductions yet.</p>}
+            {penalties.map((p) => {
+              const pending = p.amountPaise - p.recoveredPaise;
+              return (
+                <div key={p.id} className="flex justify-between gap-2 text-sm">
+                  <span>
+                    {prettyDate(p.date)} · {p.reason}
+                  </span>
+                  <span className="shrink-0 text-red-700">
+                    −{inr(p.amountPaise)}{" "}
+                    <span className="text-xs text-slate-500">
+                      {pending > 0 ? `(pending on next salary ${inr(pending)})` : "(already deducted from salary)"}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
       </Async>
       <div className="space-y-2">
-        <Input inputMode="numeric" placeholder="Amount ₹" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} />
+        <Input inputMode="numeric" placeholder="Amount to reduce from salary ₹" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} />
         <Input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
         <Btn
           disabled={busy || !amount || !reason.trim()}
@@ -648,7 +655,7 @@ export function Penalties({ id }: { id: string }) {
           }
           className="w-full"
         >
-          Add penalty
+          Reduce from salary
         </Btn>
       </div>
       <ErrorBox message={error} />
@@ -733,7 +740,7 @@ export function EmployeeDrill({ id }: { id: string }) {
           { id: "leads", label: "Leads" },
           { id: "sales", label: "Sales" },
           { id: "target", label: "Target & slabs" },
-          { id: "penalty", label: "Penalty" },
+          { id: "penalty", label: "Deduction" },
         ]}
         value={tab}
         onChange={setTab}

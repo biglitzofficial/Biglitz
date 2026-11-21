@@ -156,7 +156,7 @@ describe("payroll, incentive, lock, payslips (Phase 4; acceptance 8-10, 15)", ()
     expect((await h.call("POST", "/api/penalties", { as: mgr, body: { employeeId: b, amountRupees: 500, date: "2026-11-25", reason: "Late without notice" } })).status).toBe(200);
     const lbPen = await line(b);
     expect(lbPen.netSalaryPaise).toBe(1_550_000);
-    expect((lbPen.adjustments as Array<{ reason: string; amountPaise: number }>).some((x) => x.reason.startsWith("Penalty:") && x.amountPaise === -50_000)).toBe(true);
+    expect((lbPen.adjustments as Array<{ reason: string; amountPaise: number }>).some((x) => x.reason.startsWith("Salary deduction:") && x.amountPaise === -50_000)).toBe(true);
 
     // Draft is idempotent and does not wipe adjustments.
     const adj = await h.call("POST", "/api/payroll/BM/2026-11/adjustments", { as: admin, body: { employeeId: a, amountRupees: 500, reason: "Travel allowance" } });
