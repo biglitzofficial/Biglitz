@@ -6,7 +6,7 @@ import type { BusinessUnit, Employee, Role, SalesCategory } from "../lib/types";
 import { back, go } from "../router";
 import { isSuper, useMe } from "../auth";
 import { AddTask } from "./Tasks";
-import { EmpTarget } from "./Team";
+import { EmpTarget, Penalties } from "./Team";
 import { Async, Badge, Btn, Card, ErrorBox, Field, Input, Modal, Notice, PageTitle, Select, Stat, Textarea, useAction, useLoad } from "../ui";
 
 const useUnits = () => useLoad(() => get<{ units: BusinessUnit[] }>("/api/units"), []);
@@ -321,56 +321,6 @@ function Advances({ id }: { id: string }) {
           }
         >
           Add
-        </Btn>
-      </div>
-      <ErrorBox message={error} />
-    </Card>
-  );
-}
-
-function Penalties({ id }: { id: string }) {
-  const list = useLoad(() => get<{ penalties: Array<{ id: string; amountPaise: number; recoveredPaise: number; date: string; reason: string }> }>("/api/penalties", { employeeId: id }), [id]);
-  const [amount, setAmount] = useState("");
-  const [reason, setReason] = useState("");
-  const { busy, error, run } = useAction();
-  return (
-    <Card>
-      <h2 className="mb-2 font-semibold">Penalties / fines</h2>
-      <p className="mb-2 text-xs text-slate-500">Deducted from the next salary draft. Reason is required.</p>
-      <Async state={list}>
-        {({ penalties }) => (
-          <div className="mb-3 space-y-1">
-            {penalties.length === 0 && <p className="text-sm text-slate-500">No penalties.</p>}
-            {penalties.map((p) => (
-              <div key={p.id} className="flex justify-between gap-2 text-sm">
-                <span>
-                  {prettyDate(p.date)} · {p.reason}
-                </span>
-                <span className="shrink-0 text-red-700">
-                  −{inr(p.amountPaise)}{" "}
-                  <span className="text-xs text-slate-500">(recovered {inr(p.recoveredPaise)})</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Async>
-      <div className="space-y-2">
-        <Input inputMode="numeric" placeholder="Amount ₹" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} />
-        <Input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
-        <Btn
-          disabled={busy || !amount || !reason.trim()}
-          onClick={() =>
-            void run(async () => {
-              await post("/api/penalties", { employeeId: id, amountRupees: Number(amount), date: todayIST(), reason: reason.trim() });
-              setAmount("");
-              setReason("");
-              list.reload();
-            })
-          }
-          className="w-full"
-        >
-          Add penalty
         </Btn>
       </div>
       <ErrorBox message={error} />

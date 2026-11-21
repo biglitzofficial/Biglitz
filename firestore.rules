@@ -84,7 +84,8 @@ service cloud.firestore {
       allow read: if signedIn() && adminOf(resource.data.businessId);
     }
     match /penalties/{id} {
-      allow read: if signedIn() && adminOf(resource.data.businessId);
+      // Admins of the unit, Super Admin, or the employee's Manager. Writes only via API.
+      allow read: if signedIn() && (adminOf(resource.data.businessId) || managerOfEmp(resource.data.employeeId));
     }
     match /businessUnits/{code} {
       allow read: if signedIn() && (code == me().businessId || adminOf(code));

@@ -3,7 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
 import { adjustmentInput, advanceInput, dateIST, payrollMonthParams, penaltyInput, previousMonthKey, rupeesToPaise } from "@biglitz/shared";
 import type { AppContext } from "../context.js";
-import { canApprovePayroll, isAdminOf, requireAdminOf } from "../access.js";
+import { canApprovePayroll, isAdminOf, requireAdminOf, requireManage } from "../access.js";
 import { audit } from "../audit.js";
 import { badRequest, forbidden, notFound } from "../http.js";
 import {
@@ -54,11 +54,12 @@ export function registerPayrollRoutes(app: FastifyInstance, ctx: AppContext): vo
     return { advances: snaps.docs.map((d) => ({ id: d.id, ...d.data() })) };
   });
 
-  // ---- Penalties (Admin of the unit / Super Admin): deducted on next salary draft ----
+  // ---- Penalties (Manager of the person, Admin of the unit, Super Admin): deducted on next salary draft ----
   app.post("/api/penalties", pre, async (req) => {
     const input = penaltyInput.parse(req.body);
     const target = await getEmployee(ctx, input.employeeId);
-    requireAdminOf(req.actor, target.businessId);
+    requireManage(req.actor, target);
+    if (target.employeeId === req.actor.id) throw forbidden("You cannot assign a penalty to yourself.");
     const doc = {
       employeeId: target.employeeId,
       businessId: target.businessId,
@@ -79,7 +80,7 @@ export function registerPayrollRoutes(app: FastifyInstance, ctx: AppContext): vo
   app.get("/api/penalties", pre, async (req) => {
     const { employeeId } = z.object({ employeeId: z.string() }).parse(req.query);
     const target = await getEmployee(ctx, employeeId);
-    requireAdminOf(req.actor, target.businessId);
+    requireManage(req.actor, target);
     const snaps = await ctx.db.collection("penalties").where("employeeId", "==", employeeId).get();
     return { penalties: snaps.docs.map((d) => ({ id: d.id, ...d.data() })) };
   });

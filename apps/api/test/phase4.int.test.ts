@@ -151,9 +151,9 @@ describe("payroll, incentive, lock, payslips (Phase 4; acceptance 8-10, 15)", ()
     expect(lb.incentive).toMatchObject({ incentivePaise: 0, rateBps: 0 });
     expect(lc.incentive).toMatchObject({ incentivePaise: 240_000, rateBps: 100 });
 
-    // Admin assigns a ₹500 penalty to B (managers cannot); draft recalculates.
-    expect((await h.call("POST", "/api/penalties", { as: mgr, body: { employeeId: b, amountRupees: 100, date: "2026-11-25", reason: "x" } })).status).toBe(403);
-    expect((await h.call("POST", "/api/penalties", { as: admin, body: { employeeId: b, amountRupees: 500, date: "2026-11-25", reason: "Late without notice" } })).status).toBe(200);
+    // Manager or Admin can assign a penalty to their staff; not to self / outside scope.
+    expect((await h.call("POST", "/api/penalties", { as: mgr, body: { employeeId: mgr, amountRupees: 100, date: "2026-11-25", reason: "self" } })).status).toBe(403);
+    expect((await h.call("POST", "/api/penalties", { as: mgr, body: { employeeId: b, amountRupees: 500, date: "2026-11-25", reason: "Late without notice" } })).status).toBe(200);
     const lbPen = await line(b);
     expect(lbPen.netSalaryPaise).toBe(1_550_000);
     expect((lbPen.adjustments as Array<{ reason: string; amountPaise: number }>).some((x) => x.reason.startsWith("Penalty:") && x.amountPaise === -50_000)).toBe(true);
