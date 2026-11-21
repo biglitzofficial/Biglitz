@@ -279,7 +279,16 @@ export function More() {
   const items: Array<[string, string]> = [];
   if (!isSuper(me)) items.push(["/attendance", "My attendance"], ["/leave", "Leave"], ["/payslips", "Payslips"], ["/achievements", "Achievements"]);
   if (me.unit.hasSales && me.employee.requiresSalesEntry) items.push(["/sales", "Today's sales"]);
-  if (isManagerish(me)) items.push(["/team/leave", "Leave approvals"], ["/team/pools", "Lead pools"]);
+  if (isManagerish(me)) {
+    items.push(
+      ["/team/people", "My team"],
+      ["/team/tasks", "Team tasks"],
+      ["/team/leads", "Team leads"],
+      ["/team/leave", "Leave approvals"],
+      ["/team/pools", "Lead pools"],
+      ["/team/ranking", "Team ranking"],
+    );
+  }
   if (isAdminish(me)) items.push(["/admin/employees", "Employees"], ["/admin/units", "Business units"], ["/admin/reports", "Reports"]);
   if (isSuper(me)) items.push(["/admin/audit", "Audit log"]);
   items.push(["/profile", "Profile & PIN"]);

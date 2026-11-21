@@ -7,12 +7,13 @@ import { isAdminish, useMe } from "../auth";
 import { Async, Badge, Btn, Card, ErrorBox, Field, Input, Modal, Notice, PageTitle, Select, Stat, Tabs, Textarea, useAction, useLoad } from "../ui";
 import { CalendarView } from "./Attendance";
 import { LeadList } from "./Leads";
-import { TaskList } from "./Tasks";
+import { AddTask, TaskList } from "./Tasks";
 import { showValue } from "./Sales";
 
-type TeamTab = "today" | "tasks" | "leads" | "sales" | "leave" | "pools" | "ranking";
+type TeamTab = "today" | "people" | "tasks" | "leads" | "sales" | "leave" | "pools" | "ranking";
 const TABS: Array<{ id: TeamTab; label: string }> = [
   { id: "today", label: "Today" },
+  { id: "people", label: "People" },
   { id: "tasks", label: "Tasks" },
   { id: "leads", label: "Leads" },
   { id: "sales", label: "Sales" },
@@ -105,37 +106,93 @@ function TeamToday() {
   );
 }
 
+// ---------- People (Manager team roster — view only; create/edit is Admin) ----------
+function TeamPeople() {
+  const me = useMe();
+  const [q, setQ] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const d = useLoad(() => get<{ employees: Employee[] }>("/api/employees"), []);
+  return (
+    <div className="space-y-3">
+      <Input placeholder="Search name or ID" value={q} onChange={(e) => setQ(e.target.value)} />
+      <Btn onClick={() => setAssigning(true)} className="w-full">
+        + Assign task
+      </Btn>
+      <Async state={d}>
+        {({ employees }) => {
+          const needle = q.trim().toLowerCase();
+          const list = employees
+            .filter((e) => e.employeeId !== me.employee.employeeId && e.status !== "exited")
+            .filter((e) => !needle || e.name.toLowerCase().includes(needle) || e.employeeId.toLowerCase().includes(needle) || e.designation.toLowerCase().includes(needle));
+          return (
+            <div className="space-y-2">
+              {list.map((e) => (
+                <Card key={e.employeeId} onClick={() => go(`/team/emp/${e.employeeId}`)}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{e.name}</div>
+                      <div className="text-xs text-slate-500">
+                        {e.designation} · {e.employeeId} · {e.businessId}
+                        {e.status === "pending" ? " · pending" : ""}
+                      </div>
+                    </div>
+                    <Badge tone={e.status === "active" ? "green" : "slate"}>{e.status}</Badge>
+                  </div>
+                </Card>
+              ))}
+              {list.length === 0 && <p className="p-4 text-center text-sm text-slate-500">No one on your team yet.</p>}
+            </div>
+          );
+        }}
+      </Async>
+      {assigning && d.data && (
+        <AddTask team={d.data.employees} allowRepeat onClose={() => setAssigning(false)} onSaved={() => go("/team/tasks")} />
+      )}
+    </div>
+  );
+}
+
 // ---------- Tasks ----------
 function TeamTasks() {
+  const [assigning, setAssigning] = useState(false);
   const d = useLoad(() => get<{ members: Array<{ employeeId: string; name: string; todayDone: number; todayTotal: number; pending: number; overdue: number; completedThisMonth: number }>; noTaskNow: Array<{ employeeId: string; name: string }> }>("/api/tasks/team"), []);
+  const team = useLoad(() => get<{ employees: Employee[] }>("/api/employees"), []);
   return (
-    <Async state={d}>
-      {({ members, noTaskNow }) => (
-        <div className="space-y-3">
-          {noTaskNow.length > 0 && (
-            <Notice tone="warn">
-              <b>No task right now:</b>{" "}
-              {noTaskNow.map((n, i) => (
-                <button key={n.employeeId} type="button" className="underline" onClick={() => go(`/team/emp/${n.employeeId}`)}>
-                  {n.name}
-                  {i < noTaskNow.length - 1 ? ", " : ""}
-                </button>
-              ))}
-            </Notice>
-          )}
-          {members.map((m) => (
-            <Card key={m.employeeId} onClick={() => go(`/team/emp/${m.employeeId}?tab=tasks`)}>
-              <div className="flex items-center justify-between">
-                <div className="font-medium">{m.name}</div>
-                <div className="text-sm text-slate-600">
-                  Today {m.todayDone}/{m.todayTotal} · Pending {m.pending} · <span className={m.overdue ? "font-semibold text-red-600" : ""}>Overdue {m.overdue}</span> · Month done {m.completedThisMonth}
+    <div className="space-y-3">
+      <Btn onClick={() => setAssigning(true)} className="w-full">
+        + Assign task
+      </Btn>
+      <Async state={d}>
+        {({ members, noTaskNow }) => (
+          <div className="space-y-3">
+            {noTaskNow.length > 0 && (
+              <Notice tone="warn">
+                <b>No task right now:</b>{" "}
+                {noTaskNow.map((n, i) => (
+                  <button key={n.employeeId} type="button" className="underline" onClick={() => go(`/team/emp/${n.employeeId}`)}>
+                    {n.name}
+                    {i < noTaskNow.length - 1 ? ", " : ""}
+                  </button>
+                ))}
+              </Notice>
+            )}
+            {members.map((m) => (
+              <Card key={m.employeeId} onClick={() => go(`/team/emp/${m.employeeId}?tab=tasks`)}>
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{m.name}</div>
+                  <div className="text-sm text-slate-600">
+                    Today {m.todayDone}/{m.todayTotal} · Pending {m.pending} · <span className={m.overdue ? "font-semibold text-red-600" : ""}>Overdue {m.overdue}</span> · Month done {m.completedThisMonth}
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </Async>
+      {assigning && team.data && (
+        <AddTask team={team.data.employees} allowRepeat onClose={() => setAssigning(false)} onSaved={d.reload} />
       )}
-    </Async>
+    </div>
   );
 }
 
@@ -424,6 +481,7 @@ export function Team({ tab }: { tab: string }) {
       <PageTitle>My team</PageTitle>
       <Tabs<TeamTab> tabs={TABS} value={active} onChange={(t) => go(`/team/${t}`)} />
       {active === "today" && <TeamToday />}
+      {active === "people" && <TeamPeople />}
       {active === "tasks" && <TeamTasks />}
       {active === "leads" && <TeamLeads />}
       {active === "sales" && <TeamSales />}

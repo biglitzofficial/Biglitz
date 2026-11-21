@@ -1,13 +1,29 @@
 import { useState } from "react";
 import { get, post } from "../lib/api";
 import { dateTimeIST, istLocalToIso } from "../lib/format";
-import type { Task } from "../lib/types";
-import { Async, Badge, Btn, Card, ErrorBox, Field, Input, Modal, PageTitle, Select, Tabs, Textarea, useAction, useLoad } from "../ui";
+import type { Employee, Task } from "../lib/types";
+import { go } from "../router";
+import { isManagerish, useMe } from "../auth";
+import { Async, Badge, Btn, Card, ErrorBox, Field, Input, Modal, Notice, PageTitle, Select, Tabs, Textarea, useAction, useLoad } from "../ui";
 
 type Tab = "today" | "pending" | "overdue" | "done";
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export function AddTask({ assigneeId, allowRepeat, onClose, onSaved }: { assigneeId?: string; allowRepeat: boolean; onClose: () => void; onSaved: () => void }) {
+export function AddTask({
+  assigneeId,
+  team,
+  allowRepeat,
+  onClose,
+  onSaved,
+}: {
+  assigneeId?: string;
+  /** When set, Manager/Admin can pick who the task goes to. */
+  team?: Employee[];
+  allowRepeat: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const me = useMe();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [due, setDue] = useState("");
@@ -15,16 +31,19 @@ export function AddTask({ assigneeId, allowRepeat, onClose, onSaved }: { assigne
   const [repeat, setRepeat] = useState("none");
   const [weekday, setWeekday] = useState("1");
   const [day, setDay] = useState("1");
+  const [picked, setPicked] = useState(assigneeId ?? "");
   const { busy, error, run } = useAction();
+  const pickable = (team ?? []).filter((e) => e.status === "active" && e.employeeId !== me.employee.employeeId);
 
   const save = () =>
     run(async () => {
+      const who = assigneeId ?? (picked || undefined);
       const rep =
         repeat === "weekly" ? { kind: "weekly", weekday: Number(weekday) } : repeat === "monthly" ? { kind: "monthly", day: Number(day) } : { kind: repeat };
       await post("/api/tasks", {
         title,
         description,
-        ...(assigneeId ? { assigneeId } : {}),
+        ...(who ? { assigneeId: who } : {}),
         dueAt: due ? istLocalToIso(due) : null,
         priority,
         repeat: rep,
@@ -35,6 +54,18 @@ export function AddTask({ assigneeId, allowRepeat, onClose, onSaved }: { assigne
 
   return (
     <Modal title="New task" onClose={onClose}>
+      {!assigneeId && pickable.length > 0 && (
+        <Field label="Assign to">
+          <Select value={picked} onChange={(e) => setPicked(e.target.value)}>
+            <option value="">Myself</option>
+            {pickable.map((e) => (
+              <option key={e.employeeId} value={e.employeeId}>
+                {e.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
       <Field label="Title">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
@@ -88,7 +119,17 @@ export function AddTask({ assigneeId, allowRepeat, onClose, onSaved }: { assigne
   );
 }
 
-export function TaskList({ employeeId, canManage, allowRepeat }: { employeeId?: string; canManage: boolean; allowRepeat: boolean }) {
+export function TaskList({
+  employeeId,
+  canManage,
+  allowRepeat,
+  team,
+}: {
+  employeeId?: string;
+  canManage: boolean;
+  allowRepeat: boolean;
+  team?: Employee[];
+}) {
   const [tab, setTab] = useState<Tab>("today");
   const [adding, setAdding] = useState(false);
   const list = useLoad(() => get<{ tasks: Task[] }>("/api/tasks", { tab, employeeId }), [tab, employeeId]);
@@ -147,19 +188,36 @@ export function TaskList({ employeeId, canManage, allowRepeat }: { employeeId?: 
       </Async>
       <div className="mt-3">
         <Btn onClick={() => setAdding(true)} className="w-full">
-          + Add task
+          {canManage || (team && team.length > 0) ? "+ Assign task" : "+ Add task"}
         </Btn>
       </div>
-      {adding && <AddTask {...(employeeId ? { assigneeId: employeeId } : {})} allowRepeat={allowRepeat} onClose={() => setAdding(false)} onSaved={list.reload} />}
+      {adding && (
+        <AddTask
+          {...(employeeId ? { assigneeId: employeeId } : {})}
+          {...(team ? { team } : {})}
+          allowRepeat={allowRepeat}
+          onClose={() => setAdding(false)}
+          onSaved={list.reload}
+        />
+      )}
     </div>
   );
 }
 
 export function Tasks() {
+  const me = useMe();
+  const mgr = isManagerish(me);
+  const team = useLoad(() => (mgr ? get<{ employees: Employee[] }>("/api/employees") : Promise.resolve({ employees: [] as Employee[] })), [mgr]);
   return (
     <div>
       <PageTitle>My tasks</PageTitle>
-      <TaskList canManage={false} allowRepeat={false} />
+      {mgr && <Notice>To give work to your team, pick someone below or open Team → People.</Notice>}
+      <TaskList canManage={mgr} allowRepeat={mgr} {...(team.data ? { team: team.data.employees } : {})} />
+      {mgr && (
+        <Btn kind="ghost" onClick={() => go("/team/people")} className="mt-3 w-full">
+          View my team
+        </Btn>
+      )}
     </div>
   );
 }

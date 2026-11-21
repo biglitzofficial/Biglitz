@@ -19,7 +19,7 @@ function navFor(me: ReturnType<typeof useMe>): Array<{ path: string; label: stri
   const team = { path: "/team/today", label: "Team", icon: "👥", match: "team" };
   if (isSuper(me)) return [{ ...home, label: "Overview" }, team, { path: "/admin/payroll", label: "Payroll", icon: "💰", match: "admin/payroll" }, { path: "/admin/employees", label: "People", icon: "🧑‍💼", match: "admin/employees" }, more];
   if (isAdminish(me)) return [home, team, { path: "/admin/employees", label: "People", icon: "🧑‍💼", match: "admin/employees" }, { path: "/admin/payroll", label: "Payroll", icon: "💰", match: "admin/payroll" }, more];
-  if (isManagerish(me)) return [home, { path: "/tasks", label: "Tasks", icon: "✅", match: "tasks" }, { path: "/leads", label: "Leads", icon: "📞", match: "leads" }, team, more];
+  if (isManagerish(me)) return [home, team, { path: "/tasks", label: "My tasks", icon: "✅", match: "tasks" }, { path: "/leads", label: "Leads", icon: "📞", match: "leads" }, more];
   return [home, { path: "/tasks", label: "Tasks", icon: "✅", match: "tasks" }, { path: "/leads", label: "Leads", icon: "📞", match: "leads" }, { path: "/attendance", label: "Attendance", icon: "📅", match: "attendance" }, more];
 }
 
