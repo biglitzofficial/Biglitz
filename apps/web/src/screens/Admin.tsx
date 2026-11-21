@@ -5,6 +5,8 @@ import { inr, prettyDate, todayIST, dateTimeIST } from "../lib/format";
 import type { BusinessUnit, Employee, Role, SalesCategory } from "../lib/types";
 import { back, go } from "../router";
 import { isSuper, useMe } from "../auth";
+import { AddTask } from "./Tasks";
+import { EmpTarget } from "./Team";
 import { Async, Badge, Btn, Card, ErrorBox, Field, Input, Modal, Notice, PageTitle, Select, Stat, Textarea, useAction, useLoad } from "../ui";
 
 const useUnits = () => useLoad(() => get<{ units: BusinessUnit[] }>("/api/units"), []);
@@ -264,6 +266,20 @@ function Documents({ id, onChanged }: { id: string; onChanged: () => void }) {
   );
 }
 
+function AssignTaskCard({ employee }: { employee: Employee }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <h2 className="mb-2 font-semibold">Assign task</h2>
+      <p className="mb-2 text-xs text-slate-500">Give this person a one-off or recurring task.</p>
+      <Btn onClick={() => setOpen(true)} className="w-full">
+        + Assign task to {employee.name}
+      </Btn>
+      {open && <AddTask assigneeId={employee.employeeId} allowRepeat onClose={() => setOpen(false)} onSaved={() => setOpen(false)} />}
+    </Card>
+  );
+}
+
 function Advances({ id }: { id: string }) {
   const list = useLoad(() => get<{ advances: Array<{ id: string; amountPaise: number; recoveredPaise: number; date: string; note: string }> }>("/api/advances", { employeeId: id }), [id]);
   const [amount, setAmount] = useState("");
@@ -470,6 +486,8 @@ export function EmployeeAdmin({ id }: { id: string }) {
                 </div>
               </Card>
 
+              <EmpTarget employee={e} />
+              <AssignTaskCard employee={e} />
               {isSuper(me) && <SuperAdminRoles employee={e} onSaved={emp.reload} />}
               {exit && <ExitModal employee={e} onClose={() => setExit(false)} onDone={emp.reload} />}
             </>

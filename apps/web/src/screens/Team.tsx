@@ -606,7 +606,7 @@ export function SlabEditor({ slabs, onChange }: { slabs: Slab[]; onChange: (s: S
   );
 }
 
-function EmpTarget({ employee }: { employee: Employee }) {
+export function EmpTarget({ employee }: { employee: Employee }) {
   const t = useLoad(() => get<{ target: { targetPaise: number | null; slabs: Slab[] } }>(`/api/employees/${employee.employeeId}/target`), [employee.employeeId]);
   const [amount, setAmount] = useState<string | null>(null);
   const [slabs, setSlabs] = useState<Slab[] | null>(null);
@@ -621,15 +621,23 @@ function EmpTarget({ employee }: { employee: Employee }) {
         return (
           <Card>
             <div className="space-y-3">
-              <Field label="Monthly sales target (₹)" hint="Leave empty if this person has no target.">
+              <h2 className="font-semibold">Monthly target & incentive slabs</h2>
+              <p className="text-xs text-slate-500">
+                Manager, Admin or Super Admin can set these. The highest slab whose achievement % the staff reaches applies to the whole month&apos;s amount sales.
+              </p>
+              <Field label="Monthly sales target (₹)" hint="Leave empty if this person has no sales target / incentive.">
                 <Input inputMode="numeric" value={amt} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} />
               </Field>
-              <SlabEditor slabs={sl} onChange={setSlabs} />
+              <div>
+                <div className="mb-1 text-xs font-medium text-slate-600">Incentive slabs</div>
+                <p className="mb-2 text-xs text-slate-500">From achievement % → incentive rate (% of month&apos;s amount sales). Defaults: 80%→1%, 100%→1.5%, 120%→2%.</p>
+                <SlabEditor slabs={sl} onChange={setSlabs} />
+              </div>
               <Field label="Reason for change (required)">
                 <Textarea value={reason} onChange={(e) => setReason(e.target.value)} />
               </Field>
               <ErrorBox message={error} />
-              {saved && <Notice tone="ok">Saved.</Notice>}
+              {saved && <Notice tone="ok">Target and slabs saved.</Notice>}
               <Btn
                 disabled={busy || !reason.trim() || sl.length === 0}
                 onClick={() =>
@@ -642,7 +650,7 @@ function EmpTarget({ employee }: { employee: Employee }) {
                 }
                 className="w-full"
               >
-                Save target
+                Save target & slabs
               </Btn>
             </div>
           </Card>
@@ -656,19 +664,25 @@ export function EmployeeDrill({ id }: { id: string }) {
   const { query } = useRoute();
   const me = useMe();
   const [tab, setTab] = useState<EmpTab>((query.get("tab") as EmpTab | null) ?? "attendance");
+  const [assigning, setAssigning] = useState(false);
   const e = useLoad(() => get<{ employee: Employee }>(`/api/employees/${id}`), [id]);
   return (
     <div>
       <PageTitle right={isAdminish(me) ? <Btn kind="ghost" onClick={() => go(`/admin/employees/${id}`)} className="!px-3 !py-2">Admin</Btn> : undefined}>
         <Async state={e}>{({ employee }) => <>{employee.name}</>}</Async>
       </PageTitle>
+      <div className="mb-3">
+        <Btn onClick={() => setAssigning(true)} className="w-full">
+          + Assign task to {e.data?.employee.name ?? "staff"}
+        </Btn>
+      </div>
       <Tabs<EmpTab>
         tabs={[
           { id: "attendance", label: "Attendance" },
           { id: "tasks", label: "Tasks" },
           { id: "leads", label: "Leads" },
           { id: "sales", label: "Sales" },
-          { id: "target", label: "Target" },
+          { id: "target", label: "Target & slabs" },
         ]}
         value={tab}
         onChange={setTab}
@@ -678,6 +692,7 @@ export function EmployeeDrill({ id }: { id: string }) {
       {tab === "leads" && <LeadList employeeId={id} />}
       {e.data && tab === "sales" && <EmpSales employee={e.data.employee} />}
       {e.data && tab === "target" && <EmpTarget employee={e.data.employee} />}
+      {assigning && <AddTask assigneeId={id} allowRepeat onClose={() => setAssigning(false)} onSaved={() => setTab("tasks")} />}
     </div>
   );
 }
