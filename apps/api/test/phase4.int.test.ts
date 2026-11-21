@@ -151,6 +151,13 @@ describe("payroll, incentive, lock, payslips (Phase 4; acceptance 8-10, 15)", ()
     expect(lb.incentive).toMatchObject({ incentivePaise: 0, rateBps: 0 });
     expect(lc.incentive).toMatchObject({ incentivePaise: 240_000, rateBps: 100 });
 
+    // Admin assigns a ₹500 penalty to B (managers cannot); draft recalculates.
+    expect((await h.call("POST", "/api/penalties", { as: mgr, body: { employeeId: b, amountRupees: 100, date: "2026-11-25", reason: "x" } })).status).toBe(403);
+    expect((await h.call("POST", "/api/penalties", { as: admin, body: { employeeId: b, amountRupees: 500, date: "2026-11-25", reason: "Late without notice" } })).status).toBe(200);
+    const lbPen = await line(b);
+    expect(lbPen.netSalaryPaise).toBe(1_550_000);
+    expect((lbPen.adjustments as Array<{ reason: string; amountPaise: number }>).some((x) => x.reason.startsWith("Penalty:") && x.amountPaise === -50_000)).toBe(true);
+
     // Draft is idempotent and does not wipe adjustments.
     const adj = await h.call("POST", "/api/payroll/BM/2026-11/adjustments", { as: admin, body: { employeeId: a, amountRupees: 500, reason: "Travel allowance" } });
     expect(adj.status).toBe(200);
@@ -175,6 +182,8 @@ describe("payroll, incentive, lock, payslips (Phase 4; acceptance 8-10, 15)", ()
     const advC = (await h.ctx.db.collection("advances").where("employeeId", "==", c).get()).docs[0]?.data();
     expect(advA?.["recoveredPaise"]).toBe(300_000);
     expect(advC?.["recoveredPaise"]).toBe(1_500_000); // Rs 5,000 still outstanding
+    const penB = (await h.ctx.db.collection("penalties").where("employeeId", "==", b).get()).docs[0]?.data();
+    expect(penB?.["recoveredPaise"]).toBe(50_000);
 
     // Month locked: attendance / sales / leave / adjustments all rejected (acceptance 15).
     h.setNow("2026-12-02 10:00:00");
@@ -191,7 +200,7 @@ describe("payroll, incentive, lock, payslips (Phase 4; acceptance 8-10, 15)", ()
     expect(rows[0]).toBe("Name,Account Number,IFSC,Amount");
     expect(rows).toHaveLength(3);
     expect(csv.raw).toContain('"A","123456789012","SBIN0001234",12500');
-    expect(csv.raw).toContain('"B","123456789012","SBIN0001234",16000');
+    expect(csv.raw).toContain('"B","123456789012","SBIN0001234",15500');
 
     // Incentive approved separately; payslips only after BOTH.
     expect((await h.call("POST", "/api/payroll/BM/2026-11/submit", { as: admin, body: { part: "incentive" } })).status).toBe(200);

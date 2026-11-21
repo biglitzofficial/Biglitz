@@ -83,6 +83,9 @@ service cloud.firestore {
     match /advances/{id} {
       allow read: if signedIn() && adminOf(resource.data.businessId);
     }
+    match /penalties/{id} {
+      allow read: if signedIn() && adminOf(resource.data.businessId);
+    }
     match /businessUnits/{code} {
       allow read: if signedIn() && (code == me().businessId || adminOf(code));
     }

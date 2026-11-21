@@ -203,6 +203,13 @@ export const advanceInput = z.object({
   date: dateStr,
   note: z.string().default(""),
 });
+/** Admin/Super Admin assigns a fine; deducted on the next salary draft (like an advance, as a negative adjustment). */
+export const penaltyInput = z.object({
+  employeeId: z.string(),
+  amountRupees: z.number().int().positive(),
+  date: dateStr,
+  reason: z.string().min(1, "A reason is required"),
+});
 export const adjustmentInput = z.object({
   employeeId: z.string(),
   amountRupees: z.number().int().refine((n) => n !== 0, "Amount cannot be 0"),

@@ -80,6 +80,16 @@ async function outstandingAdvances(ctx: AppContext, empId: string, monthEnd: str
     .sort((x, y) => (x.date < y.date ? -1 : 1));
 }
 
+async function outstandingPenalties(ctx: AppContext, empId: string, monthEnd: string) {
+  const snaps = await ctx.db.collection("penalties").where("employeeId", "==", empId).get();
+  return snaps.docs
+    .map((d) => ({ id: d.id, ref: d.ref, ...(d.data() as { amountPaise: number; recoveredPaise: number; date: string; reason: string }) }))
+    .filter((p) => p.date <= monthEnd && p.amountPaise - p.recoveredPaise > 0)
+    .sort((x, y) => (x.date < y.date ? -1 : 1));
+}
+
+const isPenaltyAdj = (a: Adjustment): boolean => !!a.key?.startsWith("penalty_");
+
 /** Builds (or rebuilds) a payroll line from source data, preserving existing adjustments. */
 export async function buildLine(ctx: AppContext, emp: EmployeeDoc, month: string, today: string, adjustments: Adjustment[] = []): Promise<PayrollLine> {
   const pay = (await ctx.db.collection("employeePay").doc(emp.employeeId).get()).data() as EmployeePayDoc;
@@ -89,7 +99,17 @@ export async function buildLine(ctx: AppContext, emp: EmployeeDoc, month: string
   const monthEnd = `${month}-${String(D).padStart(2, "0")}`;
   const advances = await outstandingAdvances(ctx, emp.employeeId, monthEnd);
   const advanceOutstandingPaise = advances.reduce((s, a) => s + (a.amountPaise - a.recoveredPaise), 0);
-  const adjustmentsTotalPaise = adjustments.reduce((s, a) => s + a.amountPaise, 0);
+  const penalties = await outstandingPenalties(ctx, emp.employeeId, monthEnd);
+  const penaltyAdjs: Adjustment[] = penalties.map((p) => ({
+    kind: "adjustment",
+    amountPaise: -(p.amountPaise - p.recoveredPaise),
+    reason: `Penalty: ${p.reason}`,
+    by: "system",
+    at: Timestamp.fromDate(ctx.clock()),
+    key: `penalty_${p.id}`,
+  }));
+  const merged = [...adjustments.filter((a) => !isPenaltyAdj(a)), ...penaltyAdjs];
+  const adjustmentsTotalPaise = merged.reduce((s, a) => s + a.amountPaise, 0);
   const net = computeNet({ salaryPaise: sal.salaryPaise, advanceOutstandingPaise, adjustmentsPaise: adjustmentsTotalPaise });
   const monthlySalesPaise = await monthAmountSales(ctx, emp.employeeId, month);
   const inc = computeIncentive({ monthlySalesPaise, targetPaise: target.targetPaise, slabs: target.slabs as Slab[] });
@@ -108,7 +128,7 @@ export async function buildLine(ctx: AppContext, emp: EmployeeDoc, month: string
     advanceOutstandingPaise,
     advanceRecoveredPaise: net.advanceRecoveredPaise,
     advanceCarriedPaise: net.advanceCarriedPaise,
-    adjustments,
+    adjustments: merged,
     adjustmentsTotalPaise,
     netSalaryPaise: net.netPaise,
     salaryRoundingDiffPaise: net.roundingDiffPaise,
@@ -261,18 +281,29 @@ export async function approvePart(ctx: AppContext, unit: string, month: string, 
       const lines = (await tx.get(linesCol(ctx, unit, month))).docs.map((d) => d.data() as PayrollLine);
       const monthEnd = `${month}-31`;
       for (const l of lines) {
-        if (l.advanceRecoveredPaise <= 0) continue;
-        const advSnap = await tx.get(ctx.db.collection("advances").where("employeeId", "==", l.employeeId));
-        const advs = advSnap.docs
-          .map((d) => ({ ref: d.ref, ...(d.data() as { amountPaise: number; recoveredPaise: number; date: string }) }))
-          .filter((a) => a.date <= monthEnd && a.amountPaise - a.recoveredPaise > 0)
-          .sort((x, y) => (x.date < y.date ? -1 : 1));
-        let left = l.advanceRecoveredPaise;
-        for (const a of advs) {
-          if (left <= 0) break;
-          const take = Math.min(left, a.amountPaise - a.recoveredPaise);
-          plan.push({ ref: a.ref, recovered: a.recoveredPaise + take });
-          left -= take;
+        if (l.advanceRecoveredPaise > 0) {
+          const advSnap = await tx.get(ctx.db.collection("advances").where("employeeId", "==", l.employeeId));
+          const advs = advSnap.docs
+            .map((d) => ({ ref: d.ref, ...(d.data() as { amountPaise: number; recoveredPaise: number; date: string }) }))
+            .filter((a) => a.date <= monthEnd && a.amountPaise - a.recoveredPaise > 0)
+            .sort((x, y) => (x.date < y.date ? -1 : 1));
+          let left = l.advanceRecoveredPaise;
+          for (const a of advs) {
+            if (left <= 0) break;
+            const take = Math.min(left, a.amountPaise - a.recoveredPaise);
+            plan.push({ ref: a.ref, recovered: a.recoveredPaise + take });
+            left -= take;
+          }
+        }
+        // Penalties on the line (system adjustments) are marked fully recovered on salary approval.
+        const penKeys = new Set(l.adjustments.filter(isPenaltyAdj).map((a) => a.key!.slice("penalty_".length)));
+        if (penKeys.size) {
+          const penSnap = await tx.get(ctx.db.collection("penalties").where("employeeId", "==", l.employeeId));
+          for (const d of penSnap.docs) {
+            if (!penKeys.has(d.id)) continue;
+            const p = d.data() as { amountPaise: number; recoveredPaise: number };
+            if (p.amountPaise - p.recoveredPaise > 0) plan.push({ ref: d.ref, recovered: p.amountPaise });
+          }
         }
       }
     }

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { Timestamp } from "firebase-admin/firestore";
 import { z } from "zod";
-import { adjustmentInput, advanceInput, dateIST, payrollMonthParams, previousMonthKey, rupeesToPaise } from "@biglitz/shared";
+import { adjustmentInput, advanceInput, dateIST, payrollMonthParams, penaltyInput, previousMonthKey, rupeesToPaise } from "@biglitz/shared";
 import type { AppContext } from "../context.js";
 import { canApprovePayroll, isAdminOf, requireAdminOf } from "../access.js";
 import { audit } from "../audit.js";
@@ -52,6 +52,36 @@ export function registerPayrollRoutes(app: FastifyInstance, ctx: AppContext): vo
     requireAdminOf(req.actor, target.businessId);
     const snaps = await ctx.db.collection("advances").where("employeeId", "==", employeeId).get();
     return { advances: snaps.docs.map((d) => ({ id: d.id, ...d.data() })) };
+  });
+
+  // ---- Penalties (Admin of the unit / Super Admin): deducted on next salary draft ----
+  app.post("/api/penalties", pre, async (req) => {
+    const input = penaltyInput.parse(req.body);
+    const target = await getEmployee(ctx, input.employeeId);
+    requireAdminOf(req.actor, target.businessId);
+    const doc = {
+      employeeId: target.employeeId,
+      businessId: target.businessId,
+      amountPaise: rupeesToPaise(input.amountRupees),
+      recoveredPaise: 0,
+      date: input.date,
+      reason: input.reason,
+      createdBy: req.actor.id,
+      createdAt: Timestamp.fromDate(ctx.clock()),
+    };
+    const ref = await ctx.db.collection("penalties").add(doc);
+    await audit(ctx, { actorId: req.actor.id, action: "penalty.create", entity: "penalties", entityId: ref.id, before: null, after: doc, reason: input.reason });
+    const prev = previousMonthKey(today().slice(0, 7));
+    await recalcLine(ctx, target.businessId, prev, target.employeeId, today());
+    return { id: ref.id, penalty: doc };
+  });
+
+  app.get("/api/penalties", pre, async (req) => {
+    const { employeeId } = z.object({ employeeId: z.string() }).parse(req.query);
+    const target = await getEmployee(ctx, employeeId);
+    requireAdminOf(req.actor, target.businessId);
+    const snaps = await ctx.db.collection("penalties").where("employeeId", "==", employeeId).get();
+    return { penalties: snaps.docs.map((d) => ({ id: d.id, ...d.data() })) };
   });
 
   // ---- Payroll runs (Admin of the unit) ----
