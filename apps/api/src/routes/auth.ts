@@ -92,10 +92,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     const blocked = loginBlockReason(emp, dateIST(now));
     if (blocked) throw new HttpError(401, "ACCOUNT_INACTIVE", blocked);
 
-    // Portal rule: the Super Admin signs in only at /admin; /admin admits Admins and the Super Admin only.
-    if (emp.roles.includes("superAdmin") && portal !== "admin") {
-      throw new HttpError(403, "ADMIN_PORTAL_ONLY", "The Super Admin can sign in only at the /admin address.");
-    }
+    // Portal rule: /admin admits Admins and the Super Admin only. Super Admin may also use the main (mobile) app.
     if (portal === "admin" && !emp.roles.includes("superAdmin") && !emp.roles.includes("admin")) {
       throw new HttpError(403, "NOT_AN_ADMIN", "This sign-in page is for Admins only. Use the normal app address.");
     }
