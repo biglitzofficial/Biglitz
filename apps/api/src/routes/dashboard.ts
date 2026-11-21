@@ -40,7 +40,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
 
     const D = daysInMonth(month);
     const E = eligibleDays(month, emp.joiningDate, emp.exitDate);
-    const [attSnap, taskSnaps, leadSnaps, salesSnap, paySnap, scoreSnap, throughToday] = await Promise.all([
+    const [attSnap, taskSnaps, leadSnaps, salesSnap, paySnap, scoreSnap, throughToday, penSnap] = await Promise.all([
       ctx.db.collection("attendance").doc(attendanceId(emp.employeeId, today)).get(),
       ctx.db.collection("tasks").where("assigneeId", "==", emp.employeeId).get(),
       ctx.db.collection("leads").where("assigneeId", "==", emp.employeeId).get(),
@@ -48,6 +48,7 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
       ctx.db.collection("employeePay").doc(emp.employeeId).get(),
       ctx.db.collection("scores").doc(`${emp.employeeId}_${month}`).get(),
       loadDayDetails(ctx, emp, eligibleDates(emp, month, today), today),
+      ctx.db.collection("penalties").where("employeeId", "==", emp.employeeId).get(),
     ]);
     const att = attSnap.exists ? (attSnap.data() as AttendanceDoc) : null;
     const tasks = summarizeTasks(taskSnaps.docs.map((d) => d.data() as TaskDoc).filter((t) => !t.isTemplate), now);
@@ -60,6 +61,12 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
     const remaining = Math.max(0, E - prior.length - todayCounted);
     const priorPresent = throughToday.filter((d) => d.date <= yesterday).reduce((s, d) => s + d.present, 0);
     const leaveUsed = Math.max(0, prior.length - priorPresent);
+    // Outstanding salary deductions (penalties) reduce what the staff sees and what the next salary draft pays.
+    const pendingDeductionPaise = penSnap.docs.reduce((s, d) => {
+      const p = d.data() as { amountPaise: number; recoveredPaise: number; date: string };
+      const left = p.amountPaise - p.recoveredPaise;
+      return left > 0 && p.date <= today ? s + left : s;
+    }, 0);
 
     const score = scoreSnap.exists ? (scoreSnap.data() as ScoreDoc) : null;
     let gap: { toRank: number; points: number } | null = null;
@@ -71,14 +78,17 @@ export function registerDashboardRoutes(app: FastifyInstance, ctx: AppContext): 
     }
     const streak = score ? score.streak : await streakAsOf(ctx, emp, yesterday, today);
 
+    const grossSoFar = salarySoFar(pay.committedPaise, presentSoFar);
+    const grossProjected = projectedSalary({ committedPaise: pay.committedPaise, D, E, presentSoFar, remainingEligibleDays: remaining });
     return {
       dateIST: today,
       attendance: att ? { punchedIn: !!att.punchInAt, punchedOut: !!att.punchOutAt } : { punchedIn: false, punchedOut: false },
       tasks: { done: tasks.todayDone, total: tasks.todayTotal, pending: tasks.pending, overdue: tasks.overdue },
       followUps: { today: leadCounts.todayFollowUps, overdue: leadCounts.overdue },
       salesTodayPaise: salesToday,
-      salarySoFarPaise: salarySoFar(pay.committedPaise, presentSoFar),
-      projectedSalaryPaise: projectedSalary({ committedPaise: pay.committedPaise, D, E, presentSoFar, remainingEligibleDays: remaining }),
+      salarySoFarPaise: Math.max(0, grossSoFar - pendingDeductionPaise),
+      projectedSalaryPaise: Math.max(0, grossProjected - pendingDeductionPaise),
+      pendingDeductionPaise,
       leave: { used: leaveUsed, free: 2, overFree: leaveUsed > 2 },
       rank: score ? { unit: score.rank, all: score.rankAll, score: score.score, gap } : null,
       streak,

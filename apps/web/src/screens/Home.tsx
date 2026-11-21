@@ -58,8 +58,18 @@ export function Home() {
               <Stat label="Tasks today" value={`${h.tasks.done}/${h.tasks.total}`} sub={h.tasks.overdue ? `${h.tasks.overdue} overdue` : `${h.tasks.pending} pending`} tone={h.tasks.overdue ? "red" : undefined} onClick={() => go("/tasks")} />
               <Stat label="Follow-ups today" value={h.followUps.today} sub={h.followUps.overdue ? `${h.followUps.overdue} overdue` : "none overdue"} tone={h.followUps.overdue ? "red" : undefined} onClick={() => go("/leads?view=today")} />
               {salesOn && <Stat label="Sales today" value={inr(h.salesTodayPaise)} onClick={() => go("/sales")} />}
-              <Stat label="Salary so far" value={inr(h.salarySoFarPaise)} sub="this month" />
-              <Stat label="Projected salary" value={inr(h.projectedSalaryPaise)} sub="if you stay present" />
+              <Stat
+                label="Salary so far"
+                value={inr(h.salarySoFarPaise)}
+                sub={h.pendingDeductionPaise ? `after −${inr(h.pendingDeductionPaise)} deduction` : "this month"}
+                tone={h.pendingDeductionPaise ? "red" : undefined}
+              />
+              <Stat
+                label="Projected salary"
+                value={inr(h.projectedSalaryPaise)}
+                sub={h.pendingDeductionPaise ? `after −${inr(h.pendingDeductionPaise)} deduction` : "if you stay present"}
+                tone={h.pendingDeductionPaise ? "red" : undefined}
+              />
               <Stat label="Leave used" value={`${h.leave.used} / ${h.leave.free} free`} tone={h.leave.overFree ? "red" : undefined} onClick={() => go("/leave")} />
               <Stat
                 label="Discipline rank"

@@ -42,6 +42,7 @@ export interface Home {
   salesTodayPaise: number;
   salarySoFarPaise: number;
   projectedSalaryPaise: number;
+  pendingDeductionPaise?: number;
   leave: { used: number; free: number; overFree: boolean };
   rank: { unit: number; all: number; score: number; gap: { toRank: number; points: number } | null } | null;
   streak: number;
