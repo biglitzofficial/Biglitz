@@ -203,23 +203,44 @@ interface DocRow {
   contentType: string;
 }
 
+function guessContentType(f: File): string | null {
+  if (f.type && ["image/jpeg", "image/png", "application/pdf"].includes(f.type)) return f.type;
+  const n = f.name.toLowerCase();
+  if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+  if (n.endsWith(".png")) return "image/png";
+  if (n.endsWith(".pdf")) return "application/pdf";
+  // Android gallery sometimes sends empty type for JPEGs.
+  if (!f.type && f.name) return "image/jpeg";
+  return null;
+}
+
 function Documents({ id, onChanged }: { id: string; onChanged: () => void }) {
   const docs = useLoad(() => get<{ documents: DocRow[] }>(`/api/employees/${id}/documents`), [id]);
   const [kind, setKind] = useState("aadhaarFront");
   const [remark, setRemark] = useState("");
+  const [picked, setPicked] = useState<File | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const { busy, error, run } = useAction();
 
   const upload = () =>
     run(async () => {
-      const f = file.current?.files?.[0];
-      if (!f) throw new Error("Choose a file first.");
-      if (!["image/jpeg", "image/png", "application/pdf"].includes(f.type)) throw new Error("Only JPG, PNG or PDF files are allowed.");
+      const f = picked ?? file.current?.files?.[0] ?? null;
+      if (!f) throw new Error("Tap “Choose photo or PDF” and select a file, then tap Upload.");
+      const contentType = guessContentType(f);
+      if (!contentType) throw new Error("Only JPG, PNG or PDF files are allowed.");
       if (f.size > 10 * 1024 * 1024) throw new Error("File must be 10 MB or smaller.");
-      const slot = await post<{ docId: string; uploadUrl: string }>(`/api/employees/${id}/documents/upload-url`, { kind, remark, contentType: f.type, sizeBytes: f.size, fileName: f.name });
-      await uploadToSignedUrl(slot.uploadUrl, f, f.type);
+      if (kind === "other" && !remark.trim()) throw new Error("Enter a remark for other documents.");
+      const slot = await post<{ docId: string; uploadUrl: string }>(`/api/employees/${id}/documents/upload-url`, {
+        kind,
+        remark,
+        contentType,
+        sizeBytes: f.size,
+        fileName: f.name || `${kind}.jpg`,
+      });
+      await uploadToSignedUrl(slot.uploadUrl, f, contentType);
       await post(`/api/employees/${id}/documents/register`, { docId: slot.docId });
       if (file.current) file.current.value = "";
+      setPicked(null);
       setRemark("");
       docs.reload();
       onChanged();
@@ -234,6 +255,7 @@ function Documents({ id, onChanged }: { id: string; onChanged: () => void }) {
   return (
     <Card>
       <h2 className="mb-2 font-semibold">Documents</h2>
+      <p className="mb-2 text-xs text-slate-500">Upload Aadhaar front and back (JPG/PNG/PDF). Needed before you can activate a pending employee.</p>
       <Async state={docs}>
         {({ documents }) => (
           <div className="mb-3 space-y-1">
@@ -256,9 +278,18 @@ function Documents({ id, onChanged }: { id: string; onChanged: () => void }) {
           <option value="other">Other document</option>
         </Select>
         {kind === "other" && <Input placeholder="Remark (required)" value={remark} onChange={(e) => setRemark(e.target.value)} />}
-        <input ref={file} type="file" accept="image/jpeg,image/png,application/pdf" className="block w-full text-sm" />
+        <input
+          ref={file}
+          type="file"
+          accept="image/*,image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf"
+          className="hidden"
+          onChange={(e) => setPicked(e.target.files?.[0] ?? null)}
+        />
+        <Btn kind="ghost" disabled={busy} onClick={() => file.current?.click()} className="w-full">
+          {picked ? `Selected: ${picked.name}` : "Choose photo or PDF"}
+        </Btn>
         <ErrorBox message={error} />
-        <Btn kind="ghost" disabled={busy} onClick={() => void upload()} className="w-full">
+        <Btn disabled={busy || !picked} onClick={() => void upload()} className="w-full">
           {busy ? "Uploading…" : "Upload"}
         </Btn>
       </div>
