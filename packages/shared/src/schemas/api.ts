@@ -82,6 +82,8 @@ export const updateEmployeeInput = z.object({
 
 export const setTargetInput = z.object({
   monthlyTargetRupees: rupees.nullable(),
+  /** Per amount-category targets in ₹. Total monthly target = sum (incentive still uses the total). */
+  categoryTargetsRupees: z.record(z.string(), rupees).optional(),
   slabs: z.array(slabSchema).min(1),
   reason: z.string().min(1),
 });

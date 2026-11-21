@@ -27,7 +27,10 @@ export interface EmployeePayDoc {
 }
 
 export interface EmployeeTargetDoc {
+  /** Total monthly target (sum of amount-category targets). Used for incentive % (spec 8.6). */
   targetPaise: number | null;
+  /** Per sales-category targets in paise (amount categories). Optional for older docs. */
+  categoryTargetsPaise?: Record<string, number>;
   slabs: Slab[];
 }
 

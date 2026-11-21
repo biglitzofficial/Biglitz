@@ -210,8 +210,16 @@ export function registerEmployeeRoutes(app: FastifyInstance, ctx: AppContext): v
     const input = setTargetInput.parse(req.body);
     const ref = ctx.db.collection("employeeTargets").doc(target.employeeId);
     const before = (await ref.get()).data();
+    const categoryTargetsPaise = input.categoryTargetsRupees
+      ? Object.fromEntries(Object.entries(input.categoryTargetsRupees).map(([id, r]) => [id, rupeesToPaise(r)]))
+      : undefined;
+    const fromCats =
+      categoryTargetsPaise && Object.keys(categoryTargetsPaise).length > 0
+        ? Object.values(categoryTargetsPaise).reduce((s, n) => s + n, 0)
+        : null;
     const after: EmployeeTargetDoc = {
-      targetPaise: input.monthlyTargetRupees === null ? null : rupeesToPaise(input.monthlyTargetRupees),
+      targetPaise: fromCats !== null ? fromCats : input.monthlyTargetRupees === null ? null : rupeesToPaise(input.monthlyTargetRupees),
+      ...(categoryTargetsPaise ? { categoryTargetsPaise } : {}),
       slabs: input.slabs,
     };
     await ref.set(after);

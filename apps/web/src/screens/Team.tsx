@@ -664,8 +664,12 @@ export function Penalties({ id }: { id: string }) {
 }
 
 export function EmpTarget({ employee }: { employee: Employee }) {
-  const t = useLoad(() => get<{ target: { targetPaise: number | null; slabs: Slab[] } }>(`/api/employees/${employee.employeeId}/target`), [employee.employeeId]);
-  const [amount, setAmount] = useState<string | null>(null);
+  const t = useLoad(
+    () => get<{ target: { targetPaise: number | null; categoryTargetsPaise?: Record<string, number>; slabs: Slab[] } }>(`/api/employees/${employee.employeeId}/target`),
+    [employee.employeeId],
+  );
+  const unit = useLoad(() => get<{ unit: BusinessUnit }>(`/api/units/${employee.businessId}`), [employee.businessId]);
+  const [catVals, setCatVals] = useState<Record<string, string> | null>(null);
   const [slabs, setSlabs] = useState<Slab[] | null>(null);
   const [reason, setReason] = useState("");
   const { busy, error, run } = useAction();
@@ -673,21 +677,42 @@ export function EmpTarget({ employee }: { employee: Employee }) {
   return (
     <Async state={t}>
       {({ target }) => {
-        const amt = amount ?? (target.targetPaise === null ? "" : String(target.targetPaise / 100));
+        const amountCats = (unit.data?.unit.salesCategories ?? []).filter((c) => c.active && c.type === "amount").sort((a, b) => a.order - b.order);
+        const vals =
+          catVals ??
+          Object.fromEntries(
+            amountCats.map((c) => [c.id, target.categoryTargetsPaise?.[c.id] !== undefined ? String((target.categoryTargetsPaise[c.id] as number) / 100) : ""]),
+          );
+        const totalRupees = amountCats.reduce((s, c) => s + (Number(vals[c.id] || 0) || 0), 0);
         const sl = slabs ?? target.slabs;
+        const setCat = (id: string, v: string) => setCatVals({ ...vals, [id]: v.replace(/\D/g, "") });
         return (
           <Card>
             <div className="space-y-3">
               <h2 className="font-semibold">Monthly target & incentive slabs</h2>
               <p className="text-xs text-slate-500">
-                Manager, Admin or Super Admin can set these. The highest slab whose achievement % the staff reaches applies to the whole month&apos;s amount sales.
+                Set a ₹ target for each sales category. Incentive uses the total of these targets vs total amount sales for the month.
               </p>
-              <Field label="Monthly sales target (₹)" hint="Leave empty if this person has no sales target / incentive.">
-                <Input inputMode="numeric" value={amt} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} />
-              </Field>
+              {unit.loading && !unit.data ? (
+                <p className="text-sm text-slate-500">Loading categories…</p>
+              ) : amountCats.length === 0 ? (
+                <p className="text-sm text-slate-500">This unit has no amount sales categories yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-slate-600">Category targets (₹)</div>
+                  {amountCats.map((c) => (
+                    <Field key={c.id} label={c.name}>
+                      <Input inputMode="numeric" placeholder="0" value={vals[c.id] ?? ""} onChange={(e) => setCat(c.id, e.target.value)} />
+                    </Field>
+                  ))}
+                  <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                    Total monthly target: <b>{inr(totalRupees * 100)}</b>
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="mb-1 text-xs font-medium text-slate-600">Incentive slabs</div>
-                <p className="mb-2 text-xs text-slate-500">From achievement % → incentive rate (% of month&apos;s amount sales). Defaults: 80%→1%, 100%→1.5%, 120%→2%.</p>
+                <p className="mb-2 text-xs text-slate-500">From achievement % of the total → incentive rate (% of month&apos;s amount sales). Defaults: 80%→1%, 100%→1.5%, 120%→2%.</p>
                 <SlabEditor slabs={sl} onChange={setSlabs} />
               </div>
               <Field label="Reason for change (required)">
@@ -696,12 +721,19 @@ export function EmpTarget({ employee }: { employee: Employee }) {
               <ErrorBox message={error} />
               {saved && <Notice tone="ok">Target and slabs saved.</Notice>}
               <Btn
-                disabled={busy || !reason.trim() || sl.length === 0}
+                disabled={busy || !reason.trim() || sl.length === 0 || amountCats.length === 0}
                 onClick={() =>
                   void run(async () => {
-                    await put(`/api/employees/${employee.employeeId}/target`, { monthlyTargetRupees: amt === "" ? null : Number(amt), slabs: sl, reason });
+                    const categoryTargetsRupees = Object.fromEntries(amountCats.map((c) => [c.id, Number(vals[c.id] || 0)]));
+                    await put(`/api/employees/${employee.employeeId}/target`, {
+                      monthlyTargetRupees: totalRupees === 0 ? null : totalRupees,
+                      categoryTargetsRupees,
+                      slabs: sl,
+                      reason,
+                    });
                     setSaved(true);
                     setReason("");
+                    setCatVals(null);
                     t.reload();
                   })
                 }
